@@ -1,0 +1,456 @@
+#!/bin/bash
+# OpsEngine - Universal DevOps CLI
+# Main entry point for the ops command
+
+# =============================================================================
+# Initialization
+# =============================================================================
+
+# Find OpsEngine installation directory
+if [[ -n "$OPSENGINE_HOME" ]]; then
+    OPSENGINE_DIR="$OPSENGINE_HOME"
+elif [[ -d "${XDG_DATA_HOME:-$HOME/.local/share}/opsengine" ]]; then
+    OPSENGINE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/opsengine"
+else
+    # Running from source
+    OPSENGINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+# Version
+OPSENGINE_VERSION="2.0.0"
+
+# Load core modules
+source "$OPSENGINE_DIR/core/utils.sh"
+source "$OPSENGINE_DIR/core/config.sh"
+source "$OPSENGINE_DIR/core/state.sh"
+source "$OPSENGINE_DIR/core/executor.sh"
+source "$OPSENGINE_DIR/core/module_base.sh"
+export OPSENGINE_CORE_LOADED=1
+
+# Load project configuration if available
+load_config 2>/dev/null || true
+
+# =============================================================================
+# Help & Version
+# =============================================================================
+
+show_version() {
+    echo "OpsEngine v${OPSENGINE_VERSION}"
+}
+
+show_help() {
+    cat <<EOF
+$(echo -e "${CYAN}OpsEngine${NC} - Universal DevOps CLI")
+
+${BOLD}Usage:${NC}
+  ops <module> <phase>     Run a module phase
+  ops <command>            Run a global command
+  ops --dry-run <command>  Preview without executing
+
+${BOLD}Modules:${NC}
+  cert          SSL/TLS certificate management
+  build         Build Docker images
+  deploy        Deploy services
+  network       Docker network management
+  service       Service lifecycle management
+  version       Version management
+  cicd          CI/CD workflow generation
+
+${BOLD}Phases:${NC} (available for each module)
+  setup         Check prerequisites and dependencies
+  configure     Configure settings and collect inputs
+  deploy        Execute the main operation
+  run           Run all phases in sequence
+  resume        Resume from blocked state
+  status        Show current state
+  reset         Reset module to initial state
+
+${BOLD}Global Commands:${NC}
+  init          Initialize OpsEngine for current project
+  init --detect Initialize with full infrastructure detection
+  init --deep   Initialize with deep recursive scan
+  detect        Scan and detect all infrastructure
+  detect --deep Deep recursive scan (writes to config)
+  detect --write Standard detection (writes to config)
+  detect --dry-run  Detection only (no config write)
+  status        Show status of all modules
+  resume        Resume any blocked modules
+  help          Show this help message
+  version       Show version
+
+${BOLD}Global Flags:${NC}
+  --dry-run, -n   Preview mode - show what would happen without executing
+
+${BOLD}Examples:${NC}
+  ops init                     Initialize project
+  ops cert run                 Full SSL certificate setup
+  ops --dry-run cert run       Preview SSL setup (no changes)
+  ops cicd configure           Configure CI/CD settings
+  ops deploy --replace-frontend   Hot-swap frontend
+  ops status                   Show all module states
+
+${BOLD}Documentation:${NC}
+  ops help <module>         Show module-specific help
+  ops <module> guide        Show detailed module guide
+
+Run 'ops help <module>' for module-specific information.
+EOF
+}
+
+show_module_help() {
+    local module="$1"
+    local handler="$OPSENGINE_DIR/modules/${module}/handler.sh"
+    
+    if [[ -f "$handler" ]]; then
+        source "$handler"
+        module_help
+    else
+        log_error "Unknown module: $module"
+        echo "Available modules: cert, build, deploy, network, service, version"
+        exit 1
+    fi
+}
+
+# =============================================================================
+# Global Commands
+# =============================================================================
+
+cmd_init() {
+    local detect_flag="${1:-}"
+    
+    show_opsengine_banner
+    echo ""
+    
+    # Check if --detect or --deep-detect flag
+    if [[ "$detect_flag" == "--detect" ]] || [[ "$detect_flag" == "-d" ]]; then
+        log_info "Initializing with full detection..."
+        echo ""
+        source "$OPSENGINE_DIR/core/integration.sh"
+        run_full_detection "." "true"
+        echo ""
+        success_box "Project Initialized with Detection!" "Configuration saved to opsengine.conf"
+        return 0
+    elif [[ "$detect_flag" == "--deep-detect" ]] || [[ "$detect_flag" == "--deep" ]]; then
+        log_info "Initializing with deep recursive detection..."
+        echo ""
+        source "$OPSENGINE_DIR/core/integration.sh"
+        deep_detect_all "." 5
+        echo ""
+        success_box "Project Initialized with Deep Detection!" "All paths saved to opsengine.conf"
+        return 0
+    fi
+    
+    # Standard initialization
+    log_info "Initializing OpsEngine for this project..."
+    echo ""
+    
+    # Initialize state
+    state_init
+    
+    # Detect project type
+    local project_type="generic"
+    local project_name=$(basename "$(pwd)")
+    
+    if [[ -f "docker-compose.yml" ]] || [[ -f "docker-compose.yaml" ]]; then
+        project_type="docker-compose"
+        log_success "Detected: Docker Compose project"
+    elif [[ -f "Dockerfile" ]]; then
+        project_type="docker"
+        log_success "Detected: Docker project"
+    elif [[ -f "package.json" ]]; then
+        project_type="node"
+        log_success "Detected: Node.js project"
+    elif [[ -f "requirements.txt" ]] || [[ -f "setup.py" ]]; then
+        project_type="python"
+        log_success "Detected: Python project"
+    fi
+    
+    # Create project config if not exists
+    if [[ ! -f "opsengine.conf" ]]; then
+        cat > "opsengine.conf" <<EOF
+# OpsEngine Project Configuration
+# Generated on $(date -Iseconds)
+
+PROJECT_NAME="$project_name"
+PROJECT_TYPE="$project_type"
+PROJECT_VERSION="0.1.0"
+
+# Paths
+PROJECT_ROOT="."
+PROJECT_BACKEND_PATH="backend"
+PROJECT_FRONTEND_PATH="frontend"
+
+# Docker
+DOCKER_COMPOSE_FILE="docker-compose.yml"
+DOCKER_REGISTRY="dockerhub"
+
+# Deployment
+DEPLOY_DOMAIN=""
+DEPLOY_IP=""
+DEPLOY_USER=""
+
+# Build
+BUILD_PUSH="true"
+BUILD_NO_CACHE="false"
+
+# Mark as loaded
+OPSENGINE_LOADED="true"
+EOF
+        log_success "Created opsengine.conf"
+    else
+        log_info "opsengine.conf already exists"
+    fi
+    
+    echo ""
+    echo "Tip: Run 'ops detect --deep' to scan all infrastructure"
+    echo ""
+    success_box "Project Initialized!" "Type 'ops status' to view module states\nType 'ops help' for available commands"
+}
+
+cmd_detect() {
+    local mode="${1:-normal}"
+    
+    show_opsengine_banner
+    echo ""
+    
+    # Load integration functions
+    source "$OPSENGINE_DIR/core/integration.sh"
+    
+    case "$mode" in
+        --deep|deep|-d)
+            log_info "Running deep recursive detection..."
+            echo ""
+            deep_detect_all "." 5
+            ;;
+        --write|-w)
+            log_info "Running detection and writing to config..."
+            echo ""
+            run_full_detection "." "true"
+            ;;
+        --no-write|--dry-run|-n)
+            log_info "Running detection (no config write)..."
+            echo ""
+            run_full_detection "." "false"
+            ;;
+        *)
+            log_info "Running standard detection..."
+            echo ""
+            run_full_detection "." "true"
+            ;;
+    esac
+}
+
+cmd_status() {
+    show_opsengine_banner
+    
+    local project_name=$(state_get "project_name" "$(basename "$(pwd)")")
+    echo -e "Project: ${GREEN}$project_name${NC}"
+    echo ""
+    
+    if state_exists; then
+        state_list_modules
+    else
+        log_warning "Project not initialized. Run: ops init"
+    fi
+}
+
+cmd_resume() {
+    if ! state_exists; then
+        log_error "Project not initialized. Run: ops init"
+        exit 1
+    fi
+    
+    # Find and resume blocked modules
+    local found_blocked=false
+    
+    for module in cert build deploy network service version; do
+        if state_is_blocked "$module"; then
+            found_blocked=true
+            log_info "Resuming blocked module: $module"
+            run_module "$module" "resume"
+        fi
+    done
+    
+    if [[ "$found_blocked" == false ]]; then
+        log_info "No blocked modules found"
+    fi
+}
+
+# =============================================================================
+# Module Runner
+# =============================================================================
+
+run_module() {
+    local module="$1"
+    shift
+    
+    # Map short names to module directories
+    local module_dir=""
+    case "$module" in
+        cert|certificate|ssl)
+            module_dir="cert"
+            ;;
+        build|builder)
+            module_dir="builder"
+            ;;
+        deploy|deployer)
+            module_dir="deployer"
+            ;;
+        network|net)
+            module_dir="network"
+            ;;
+        service|svc)
+            module_dir="service"
+            ;;
+        version|ver)
+            module_dir="version"
+            ;;
+        cicd|ci|cd|workflow)
+            module_dir="cicd"
+            ;;
+        *)
+            log_error "Unknown module: $module"
+            echo "Available modules: cert, build, deploy, network, service, version, cicd"
+            exit 1
+            ;;
+    esac
+    
+    # Check for module handler
+    local handler="$OPSENGINE_DIR/modules/${module_dir}/handler.sh"
+    
+    if [[ -f "$handler" ]]; then
+        source "$handler"
+        module_main "$@"
+    else
+        # Fallback to legacy handlers during migration
+        local legacy_handler=""
+        case "$module_dir" in
+            cert)
+                legacy_handler="$OPSENGINE_DIR/certification/handler.sh"
+                ;;
+            build|deploy)
+                legacy_handler="$OPSENGINE_DIR/devops/${module_dir}.sh"
+                ;;
+            network)
+                legacy_handler="$OPSENGINE_DIR/network/handler.sh"
+                ;;
+            service)
+                legacy_handler="$OPSENGINE_DIR/services/handler.sh"
+                ;;
+        esac
+        
+        if [[ -n "$legacy_handler" ]] && [[ -f "$legacy_handler" ]]; then
+            log_info "Using legacy handler for $module"
+            bash "$legacy_handler" "$args"
+        else
+            log_error "Module not implemented yet: $module"
+            log_info "Coming soon! Check back after updates."
+            exit 1
+        fi
+    fi
+}
+
+# =============================================================================
+# Main Command Router
+# =============================================================================
+
+main() {
+    local command="${1:-help}"
+    shift 2>/dev/null || true
+    
+    case "$command" in
+        # Global commands
+        init)
+            cmd_init "$@"
+            ;;
+        detect|scan)
+            cmd_detect "$@"
+            ;;
+        status|st)
+            cmd_status "$@"
+            ;;
+        resume)
+            cmd_resume "$@"
+            ;;
+        help|--help|-h)
+            if [[ -n "${1:-}" ]]; then
+                show_module_help "$1"
+            else
+                show_help
+            fi
+            ;;
+        version|--version|-v)
+            show_version
+            ;;
+        
+        # Module commands
+        cert|certificate|ssl)
+            run_module "cert" "$@"
+            ;;
+        build)
+            run_module "build" "$@"
+            ;;
+        deploy)
+            run_module "deploy" "$@"
+            ;;
+        network|net)
+            run_module "network" "$@"
+            ;;
+        service|svc)
+            run_module "service" "$@"
+            ;;
+        version-bump|ver)
+            run_module "version" "$@"
+            ;;
+        cicd|ci|cd|workflow)
+            run_module "cicd" "$@"
+            ;;
+        
+        # Legacy compatibility - direct script execution
+        start)
+            bash "$OPSENGINE_DIR/devops/start.sh" "$@"
+            ;;
+        logs)
+            local compose_file=$(get_config "DOCKER_COMPOSE_FILE" "docker-compose.yml")
+            docker compose -f "$compose_file" logs "$@"
+            ;;
+        
+        # Interactive menu (legacy)
+        menu|interactive)
+            bash "$OPSENGINE_DIR/ops.sh"
+            ;;
+        
+        # Unknown
+        *)
+            log_error "Unknown command: $command"
+            echo ""
+            echo "Run 'ops help' for usage information."
+            exit 1
+            ;;
+    esac
+}
+
+# =============================================================================
+# Entry Point with Global Flag Parsing
+# =============================================================================
+
+# Parse global flags first
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run|-n)
+            export OPSENGINE_DRY_RUN=true
+            echo -e "${MAGENTA}╔═══════════════════════════════════╗${NC}"
+            echo -e "${MAGENTA}║         DRY-RUN MODE              ║${NC}"
+            echo -e "${MAGENTA}║  No changes will be made          ║${NC}"
+            echo -e "${MAGENTA}╚═══════════════════════════════════╝${NC}"
+            echo ""
+            ;;
+        *)
+            ARGS+=("$arg")
+            ;;
+    esac
+done
+
+# Run main with remaining args
+main "${ARGS[@]}"
