@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ops profile",
+  "type": "object",
+  "required": ["version", "profile"],
+  "properties": {
+    "version": { "type": "integer" },
+    "profile": { "type": "string" },
+    "remote": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string" },
+        "user": { "type": "string" },
+        "path": { "type": "string" },
+        "ssh_key_path": { "type": "string" }
+      }
+    },
+    "docker": {
+      "type": "object",
+      "properties": {
+        "network": { "type": "string" },
+        "compose_files": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "healthchecks": { "type": "object" },
+    "certificates": { "type": "object" }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "project": {
+    "name": "",
+    "default_profile": ""
+  },
+  "scaffold": {
+    "type": "",
+    "package_manager": "",
+    "template": ""
+  },
+  "runtimes": {
+    "python": {
+      "manager": "",
+      "env": "",
+      "fallbacks": []
+    }
+  },
+  "services": {}
+}

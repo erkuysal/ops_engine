@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ops project setup",
+  "type": "object",
+  "required": ["version", "project", "services"],
+  "properties": {
+    "version": { "type": "integer" },
+    "project": {
+      "type": "object",
+      "required": ["name", "default_profile"],
+      "properties": {
+        "name": { "type": "string" },
+        "default_profile": { "type": "string" }
+      }
+    },
+    "runtimes": { "type": "object" },
+    "services": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "port": { "type": "integer" },
+          "command": { "type": "string" },
+          "env_files": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "runtime": { "type": "string" }
+        }
+      }
+    }
+  }
+}

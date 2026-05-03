@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ops settings",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": { "type": "integer" },
+    "run": {
+      "type": "object",
+      "properties": {
+        "default_mode": { "enum": ["foreground", "background"] }
+      }
+    },
+    "start": {
+      "type": "object",
+      "properties": {
+        "mode": { "enum": ["foreground", "background"] },
+        "with_deps": { "type": "boolean" },
+        "preview": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "lines": { "type": "integer", "minimum": 0 },
+            "wait_seconds": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "run": {
+    "default_mode": "foreground"
+  },
+  "start": {
+    "mode": "background",
+    "with_deps": true,
+    "preview": {
+      "enabled": true,
+      "lines": 20,
+      "wait_seconds": 1
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "profile": "staging",
+  "remote": {
+    "host": "",
+    "user": "",
+    "path": "",
+    "ssh_key_path": ""
+  },
+  "docker": {
+    "network": "",
+    "compose_files": []
+  },
+  "healthchecks": {}
+}

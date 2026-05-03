@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "profile": "remote",
+  "remote": {
+    "host": "",
+    "user": "",
+    "path": "",
+    "ssh_key_path": ""
+  },
+  "docker": {
+    "network": "",
+    "compose_files": []
+  },
+  "healthchecks": {},
+  "certificates": {
+    "provider": "",
+    "domain": ""
+  }
+}

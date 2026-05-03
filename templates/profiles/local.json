@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "profile": "local",
+  "docker": {
+    "network": "",
+    "compose_files": []
+  },
+  "healthchecks": {}
+}
