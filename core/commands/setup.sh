@@ -28,8 +28,9 @@ Usage: ops setup [--profile NAME] [--dry-run] [--apply]
 Generates and validates project setup values:
   .ops.yaml setup/settings/profiles sections
   .ops.project/ generated state directories
+  .ops.project/config project memory files
   .ops.project/generated/discovery.json workspace discovery cache
-  scripts/project_structure.json and scripts/project_values.json metadata
+  .ops.project/generated/project_structure.json and project_values.json metadata
 
 By default, generated setup values are empty/project-neutral. Use the
 interactive flow to fill project-specific scaffold/runtime values.
@@ -203,6 +204,268 @@ _generate_profile_json() {
   jq -n '{remote: {host: "", user: "", path: "", ssh_key_path: ""}, docker: {network: "", compose_files: []}, healthchecks: {}, certificates: {provider: "", domain: ""}}'
 }
 
+_discovery_human_name() {
+  local id="$1"
+  awk -v value="${id}" 'BEGIN {
+    n = split(value, parts, /[_-]+/)
+    first = 1
+    for (i = 1; i <= n; i++) {
+      part = parts[i]
+      if (part == "") continue
+      if (!first) printf " "
+      printf "%s%s", toupper(substr(part, 1, 1)), tolower(substr(part, 2))
+      first = 0
+    }
+  }'
+}
+
+_discovery_services_yaml() {
+  local discovery_json="$1"
+
+  jq -c '.directories[] | select(.service == true)' <<< "${discovery_json}" |
+    while IFS= read -r entry; do
+      local id name stack path role
+      id="$(jq -r '.id' <<< "${entry}")"
+      name="$(_discovery_human_name "${id}")"
+      stack="$(jq -r '.stack' <<< "${entry}")"
+      path="$(jq -r '.path' <<< "${entry}")"
+      role="$(jq -r '.role' <<< "${entry}")"
+
+      printf '  - id: %s\n' "${id}"
+      printf '    name: "%s"\n' "${name}"
+      printf '    stack: %s\n' "${stack}"
+      printf '    path: %s\n' "${path}"
+      printf '    env_files: []\n'
+      printf '    env_policy: dev_file\n'
+      printf '    env_materialization: none\n'
+      printf '    env_output_file: ""\n'
+      printf '    actions:\n'
+      printf '      start: ""\n'
+      printf '      stop: ""\n'
+      printf '      logs: ""\n'
+      printf '      build: ""\n'
+      printf '      test: ""\n'
+      printf '      lint: ""\n'
+      printf '    depends_on: []\n'
+      printf '    healthcheck: ""\n'
+
+      if [[ "${role}" == "process_group" ]]; then
+        printf '    runner:\n'
+        printf '      kind: process_group\n'
+        printf '    build:\n'
+        printf '      output_dir: .ops.project/generated/bin/%s\n' "${id}"
+        printf '      target_os: linux\n'
+        printf '      target_arch: amd64\n'
+        printf '      outputs:\n'
+        jq -r '.build.outputs[]? | [.name, .package] | @tsv' <<< "${entry}" |
+          while IFS=$'\t' read -r out_name package; do
+            printf '        - name: %s\n' "${out_name}"
+            printf '          package: %s\n' "${package}"
+          done
+        printf '    run:\n'
+        printf '      processes:\n'
+        jq -r '.build.outputs[]?.name' <<< "${entry}" |
+          while IFS= read -r proc; do
+            [[ -n "${proc}" && "${proc}" != "null" ]] && printf '        - name: %s\n' "${proc}"
+          done
+      fi
+
+      printf '    meta:\n'
+      printf '      source: setup_discovery\n'
+      printf '      role: %s\n' "${role}"
+      printf '      confirmed_by_user: false\n'
+      printf '      generated_at: "%s"\n' "$(ops_timestamp)"
+      printf '\n'
+    done
+}
+
+_discovery_start_command() {
+  local entry="$1"
+  local stack role scripts
+  stack="$(jq -r '.stack' <<< "${entry}")"
+  role="$(jq -r '.role' <<< "${entry}")"
+
+  if [[ "${role}" == "process_group" ]]; then
+    printf ''
+    return 0
+  fi
+
+  case "${stack}" in
+    django) printf 'python -u manage.py runserver 0.0.0.0:8000' ;;
+    elixir-phoenix) printf 'mix phx.server' ;;
+    go) printf 'go run main.go' ;;
+    node)
+      scripts="$(jq -c '.package.scripts // {}' <<< "${entry}")"
+      if jq -e '.dev?' <<< "${scripts}" >/dev/null 2>&1; then
+        printf 'npm run dev'
+      elif jq -e '.start?' <<< "${scripts}" >/dev/null 2>&1; then
+        printf 'npm start'
+      else
+        printf ''
+      fi
+      ;;
+    *) printf '' ;;
+  esac
+}
+
+_generate_setup_json_from_discovery() {
+  local discovery_json="$1"
+  local services_json="{}"
+
+  while IFS= read -r entry; do
+    [[ -z "${entry}" ]] && continue
+    local id stack role cmd port service_entry
+    id="$(jq -r '.id' <<< "${entry}")"
+    stack="$(jq -r '.stack' <<< "${entry}")"
+    role="$(jq -r '.role' <<< "${entry}")"
+    cmd="$(_discovery_start_command "${entry}")"
+    port="0"
+
+    service_entry="$(jq -n \
+      --arg runtime "" \
+      --arg command "${cmd}" \
+      --arg role "${role}" \
+      --argjson port "${port}" \
+      '{runtime: $runtime, port: $port, command: $command, env_files: [], role: $role}')"
+    if [[ "${stack}" == "django" ]]; then
+      service_entry="$(jq '. + {django: {conda_env: ""}}' <<< "${service_entry}")"
+    fi
+
+    services_json="$(jq \
+      --arg id "${id}" \
+      --argjson entry "${service_entry}" \
+      '. + {($id): $entry}' \
+      <<< "${services_json}")"
+  done < <(jq -c '.directories[] | select(.service == true)' <<< "${discovery_json}")
+
+  local proposed_json
+  proposed_json="$(jq -n \
+    --argjson services "${services_json}" \
+    '{
+      default_profile: "",
+      scaffold: {type: "", package_manager: "", template: ""},
+      runtimes: {python: {manager: "", env: "", fallbacks: []}},
+      services: $services
+    }')"
+
+  if manifest_exists; then
+    local existing_json
+    existing_json="$(yq e -o=json '.setup // {}' "${OPS_MANIFEST}" 2>/dev/null || printf '{}')"
+    jq -n \
+      --argjson proposed "${proposed_json}" \
+      --argjson existing "${existing_json}" \
+      '
+        $proposed
+        | .default_profile = ($existing.default_profile // .default_profile)
+        | .scaffold = ($existing.scaffold // .scaffold)
+        | .runtimes = ($existing.runtimes // .runtimes)
+        | .services = (
+            reduce (.services | keys[]) as $id
+              ({};
+               .[$id] = (
+                 ($proposed.services[$id] * ($existing.services[$id] // {}))
+                 | .command = $proposed.services[$id].command
+                 | .role = $proposed.services[$id].role
+               ))
+          )
+      '
+  else
+    printf '%s\n' "${proposed_json}"
+  fi
+}
+
+_generate_project_config_json_from_discovery() {
+  local discovery_json="$1"
+  local project_name
+
+  project_name="$(basename "${OPS_PROJECT_ROOT}")"
+  if manifest_exists; then
+    project_name="$(yq e '.project.name // ""' "${OPS_MANIFEST}" 2>/dev/null || true)"
+    [[ -z "${project_name}" || "${project_name}" == "null" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
+  fi
+
+  jq -n \
+    --arg version "1" \
+    --arg generated_at "$(ops_timestamp)" \
+    --arg name "${project_name}" \
+    --arg root "${OPS_PROJECT_ROOT}" \
+    --arg manifest ".ops.yaml" \
+    --arg discovery ".ops.project/generated/discovery.json" \
+    '{
+      version: $version,
+      generated_at: $generated_at,
+      name: $name,
+      root: $root,
+      compatibility_manifest: $manifest,
+      discovery_cache: $discovery
+    }'
+}
+
+_generate_services_config_json_from_discovery() {
+  local discovery_json="$1" setup_json="$2"
+
+  jq \
+    --arg generated_at "$(ops_timestamp)" \
+    --argjson setup "${setup_json}" \
+    '{
+      version: "1",
+      generated_at: $generated_at,
+      source: "setup_discovery",
+      services: [
+        .directories[]
+        | select(.service == true)
+        | {
+            id,
+            name: (.id | gsub("[_-]+"; " ") | split(" ") | map((.[0:1] | ascii_upcase) + .[1:]) | join(" ")),
+            stack,
+            path,
+            role,
+            confidence,
+            evidence,
+            runner: (if .role == "process_group" then {kind: "process_group"} else {kind: "stack"} end),
+            build: (.build // {}),
+            run: (if .role == "process_group" then {processes: ((.build.outputs // []) | map({name}))} else {} end),
+            setup: {
+              command: ($setup.services[.id].command // ""),
+              env_files: ($setup.services[.id].env_files // []),
+              port: ($setup.services[.id].port // 0),
+              runtime: ($setup.services[.id].runtime // "")
+            },
+            meta: {
+              source: "setup_discovery",
+              confirmed_by_user: false
+            }
+          }
+      ]
+    }' <<< "${discovery_json}"
+}
+
+_materialize_project_config_from_discovery() {
+  local discovery_json="$1" setup_json="$2" profile_json="$3"
+
+  mkdir -p "${OPS_PROJECT_CONFIG_DIR}"
+
+  _generate_project_config_json_from_discovery "${discovery_json}" > "${OPS_PROJECT_CONFIG_DIR}/project.json"
+  _generate_services_config_json_from_discovery "${discovery_json}" "${setup_json}" > "${OPS_PROJECT_CONFIG_DIR}/services.json"
+  jq -n \
+    --arg generated_at "$(ops_timestamp)" \
+    --arg source "setup_discovery" \
+    --argjson setup "${setup_json}" \
+    '{version: "1", generated_at: $generated_at, source: $source, setup: $setup}' \
+    > "${OPS_PROJECT_CONFIG_DIR}/settings.json"
+  jq -n \
+    --arg generated_at "$(ops_timestamp)" \
+    --arg profile "${PROFILE}" \
+    --argjson profile_config "${profile_json}" \
+    '{version: "1", generated_at: $generated_at, default_profile: $profile, profiles: {($profile): $profile_config}}' \
+    > "${OPS_PROJECT_CONFIG_DIR}/profiles.json"
+
+  ops_ok "Materialized .ops.project/config/project.json"
+  ops_ok "Materialized .ops.project/config/services.json"
+  ops_ok "Materialized .ops.project/config/settings.json"
+  ops_ok "Materialized .ops.project/config/profiles.json"
+}
+
 _print_discovery_preview() {
   local discovery_json="$1"
 
@@ -277,6 +540,17 @@ _run_discovery() {
   fi
 }
 
+_print_discovery_config_proposal() {
+  local discovery_json="$1"
+
+  printf '\nProposed .ops.yaml services from discovery:\n'
+  printf 'services:\n'
+  _discovery_services_yaml "${discovery_json}"
+
+  printf '\nProposed .ops.yaml setup from discovery:\n'
+  _generate_setup_json_from_discovery "${discovery_json}" | yq e -P -
+}
+
 _interactive_profile_json() {
   require_bins jq
   local host user path ssh_key docker_network compose_files cert_provider cert_domain health_name health_url healthchecks_json compose_json
@@ -326,11 +600,10 @@ _interactive_profile_json() {
 _materialize_project_structure_reference() {
   require_bins jq yq
 
-  local scripts_dir structure_file
-  scripts_dir="${OPS_PROJECT_ROOT}/scripts"
-  structure_file="${scripts_dir}/project_structure.json"
+  local structure_file
+  structure_file="${OPS_PROJECT_GENERATED_DIR}/project_structure.json"
 
-  mkdir -p "${scripts_dir}"
+  mkdir -p "${OPS_PROJECT_GENERATED_DIR}"
 
   local backend_json frontend_json
   local backend_idx frontend_idx
@@ -386,16 +659,15 @@ _materialize_project_structure_reference() {
       FRONTEND: $frontend
     }' > "${structure_file}"
 
-  ops_ok "Materialized scripts/project_structure.json from .ops.yaml services"
+    ops_ok "Materialized .ops.project/generated/project_structure.json from .ops.yaml services"
 }
 
 _materialize_project_values_metadata() {
   require_bins jq yq
 
-  local scripts_dir values_file tmp_values
-  scripts_dir="${OPS_PROJECT_ROOT}/scripts"
-  values_file="${scripts_dir}/project_values.json"
-  mkdir -p "${scripts_dir}"
+  local values_file tmp_values
+  values_file="${OPS_PROJECT_GENERATED_DIR}/project_values.json"
+  mkdir -p "${OPS_PROJECT_GENERATED_DIR}"
 
   local project_name
   project_name="$(yq e '.project.name // ""' "${OPS_MANIFEST}" 2>/dev/null || true)"
@@ -434,7 +706,7 @@ _materialize_project_values_metadata() {
       }' > "${values_file}"
   fi
 
-  ops_ok "Materialized scripts/project_values.json project_metadata"
+  ops_ok "Materialized .ops.project/generated/project_values.json project_metadata"
 }
 
 _backup_file() {
@@ -449,20 +721,27 @@ _backup_file() {
 }
 
 _apply_generated() {
-  local setup_tmp profile_tmp
+  local setup_tmp profile_tmp discovery_tmp discovery_file
   require_bins jq yq
   setup_tmp="$(mktemp)"
   profile_tmp="$(mktemp)"
+  discovery_tmp="$(mktemp)"
   if [[ "${INTERACTIVE}" == "true" ]]; then
     _interactive_setup_json > "${setup_tmp}"
     _interactive_profile_json > "${profile_tmp}"
   else
-    _generate_setup_json > "${setup_tmp}"
+    discovery_scan_project_json > "${discovery_tmp}"
+    _generate_setup_json_from_discovery "$(cat "${discovery_tmp}")" > "${setup_tmp}"
     _generate_profile_json "${PROFILE}" > "${profile_tmp}"
   fi
 
   _backup_file "${OPS_MANIFEST}"
-  mkdir -p "${OPS_PROJECT_STATE_DIR}" "${OPS_PROFILES_DIR}" "${OPS_PROJECT_GENERATED_DIR}" "${OPS_PROJECT_LOG_DIR}" "${OPS_PROJECT_RUN_DIR}"
+  mkdir -p "${OPS_PROJECT_STATE_DIR}" "${OPS_PROFILES_DIR}" "${OPS_PROJECT_GENERATED_DIR}" "${OPS_PROJECT_CONFIG_DIR}" "${OPS_PROJECT_LOG_DIR}" "${OPS_PROJECT_RUN_DIR}"
+  if [[ -s "${discovery_tmp}" ]]; then
+    discovery_file="$(discovery_write_project_json)"
+    _materialize_project_config_from_discovery "$(cat "${discovery_tmp}")" "$(cat "${setup_tmp}")" "$(cat "${profile_tmp}")"
+    ops_ok "Wrote ${discovery_file#${OPS_PROJECT_ROOT}/}"
+  fi
   yq e -i ".setup = load(\"${setup_tmp}\") | .profiles.${PROFILE} = load(\"${profile_tmp}\")" "${OPS_MANIFEST}"
   yq e -P -i '.' "${OPS_MANIFEST}"
   yq e -o=json -I=2 ".setup" "${OPS_MANIFEST}" > "${OPS_PROJECT_GENERATED_DIR}/setup.json"
@@ -470,7 +749,7 @@ _apply_generated() {
   rm -f "${OPS_PROJECT_GENERATED_DIR}/setup.yaml" "${OPS_PROFILES_DIR}/${PROFILE}.yaml" >/dev/null 2>&1 || true
   _materialize_project_structure_reference
   _materialize_project_values_metadata
-  rm -f "${setup_tmp}" "${profile_tmp}"
+  rm -f "${setup_tmp}" "${profile_tmp}" "${discovery_tmp}"
   ops_ok "Updated .ops.yaml setup section"
   ops_ok "Updated .ops.yaml profiles.${PROFILE} section"
   ops_ok "Materialized .ops.project/generated/setup.json and .ops.project/profiles/${PROFILE}.json"
@@ -542,7 +821,9 @@ case "${SUBCMD}" in
     ops_section "ops setup"
     if ! manifest_exists; then
       ops_warn ".ops.yaml not found. Running discovery-only setup preview."
-      _run_discovery
+      discovery_json="$(discovery_scan_project_json)"
+      _print_discovery_preview "${discovery_json}"
+      _print_discovery_config_proposal "${discovery_json}"
       if [[ "${APPLY}" == "true" ]]; then
         ops_info "Manifest/config generation from discovery is not implemented in this batch yet."
       fi
@@ -551,8 +832,9 @@ case "${SUBCMD}" in
     if [[ "${DRY_RUN}" == "true" || "${APPLY}" == "false" ]]; then
       discovery_json="$(discovery_scan_project_json)"
       _print_discovery_preview "${discovery_json}"
-      ops_info "Preview root .ops.yaml setup/profile sections for '${PROFILE}'. Use --apply to write."
-      printf '\n.ops.yaml setup:\n'
+      _print_discovery_config_proposal "${discovery_json}"
+      ops_info "Preview legacy root .ops.yaml setup/profile sections for '${PROFILE}'. Use --apply to write."
+      printf '\nLegacy .ops.yaml setup preview:\n'
       if [[ "${INTERACTIVE}" == "true" ]]; then
         _interactive_setup_json | yq e -P -
       else

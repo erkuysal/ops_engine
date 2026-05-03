@@ -14,6 +14,7 @@ The immediate goal is:
 - discovery writes structured facts to `.ops.project/generated/discovery.json`
 - setup can distinguish services from workspace roots and shared libraries
 - setup can propose project config from discovery
+- setup can apply discovery-derived setup into `.ops.project/config`
 - setup asks interactively only for ambiguous values
 
 ## Recently Completed
@@ -40,6 +41,13 @@ The immediate goal is:
 - Added cross-shell detection helpers for Windows-hosted tools under WSL.
 - Verified Windows Go can cross-compile Linux ELF binaries into `.ops.project`.
 - Updated `ops show start userengine` to display the managed Go process group plan.
+- Added discovery-derived `.ops.project/config` materialization:
+  - `.ops.project/config/project.json`
+  - `.ops.project/config/services.json`
+  - `.ops.project/config/settings.json`
+  - `.ops.project/config/profiles.json`
+- Updated `ops setup --apply` to use discovery-derived setup values while preserving confirmed project runtime values.
+- Moved setup-generated metadata from root `scripts/` into `.ops.project/generated/`.
 
 ## Active Problems
 
@@ -194,7 +202,15 @@ Tasks:
 - Preserve existing confirmed decisions.
 - Ask questions for ambiguous entries.
 
-Status: pending
+Status: first pass completed
+
+Notes:
+
+- `ops setup --dry-run` now prints proposed services and setup sections from structured discovery.
+- `ops setup --apply` now writes discovery-derived setup values and `.ops.project/config` files.
+- Existing confirmed runtime values such as Python manager/env are preserved during apply.
+- `.ops.yaml services` is not rewritten yet; that remains a separate, higher-risk merge step.
+- Legacy metadata files are now generated under `.ops.project/generated` instead of root `scripts/`.
 
 ### Slice 5: `.ops.project/config`
 
@@ -212,7 +228,12 @@ Tasks:
 - Keep writing `.ops.yaml` as compatibility export.
 - Add config read helpers that prefer `.ops.project/config`.
 
-Status: pending
+Status: first pass completed
+
+Notes:
+
+- Setup now materializes project memory into `.ops.project/config`.
+- Runtime commands still read `.ops.yaml` first; config-reader helpers are the next step.
 
 ### Slice 6: Runtime Plans
 
