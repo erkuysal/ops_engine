@@ -15,6 +15,7 @@ The immediate goal is:
 - setup can distinguish services from workspace roots and shared libraries
 - setup can propose project config from discovery
 - setup can apply discovery-derived setup into `.ops.project/config`
+- runtime helpers can prefer `.ops.project/config` over `.ops.yaml`
 - setup asks interactively only for ambiguous values
 
 ## Recently Completed
@@ -48,6 +49,8 @@ The immediate goal is:
   - `.ops.project/config/profiles.json`
 - Updated `ops setup --apply` to use discovery-derived setup values while preserving confirmed project runtime values.
 - Moved setup-generated metadata from root `scripts/` into `.ops.project/generated/`.
+- Added config-first readers for services, setup values, and runtime settings.
+- Updated `run`, `show`, and the Go process-group stack to use config-backed service data.
 
 ## Active Problems
 
@@ -233,7 +236,9 @@ Status: first pass completed
 Notes:
 
 - Setup now materializes project memory into `.ops.project/config`.
-- Runtime commands still read `.ops.yaml` first; config-reader helpers are the next step.
+- Runtime helper reads now prefer `.ops.project/config` for service list/fields, setup values, and settings.
+- `.ops.yaml` remains the compatibility fallback and validation target for now.
+- `ops show` reports when service config is coming from `.ops.project/config/services.json`.
 
 ### Slice 6: Runtime Plans
 

@@ -15,7 +15,9 @@ OPS_PROJECT_HISTORY_DIR="${OPS_PROJECT_STATE_DIR}/.history"
 OPS_PROFILES_DIR="${OPS_PROJECT_STATE_DIR}/profiles"
 OPS_PROJECT_SETUP_GENERATED_FILE="${OPS_PROJECT_GENERATED_DIR}/setup.json"
 OPS_PROJECT_SETUP_GENERATED_LEGACY_FILE="${OPS_PROJECT_GENERATED_DIR}/setup.yaml"
-export OPS_SETUP_FILE OPS_PROJECT_STATE_DIR OPS_PROJECT_LOG_DIR OPS_PROJECT_RUN_DIR OPS_PROJECT_GENERATED_DIR OPS_PROJECT_CONFIG_DIR OPS_PROJECT_HISTORY_DIR OPS_PROFILES_DIR
+OPS_PROJECT_CONFIG_SETTINGS_FILE="${OPS_PROJECT_CONFIG_DIR}/settings.json"
+OPS_PROJECT_CONFIG_PROFILES_FILE="${OPS_PROJECT_CONFIG_DIR}/profiles.json"
+export OPS_SETUP_FILE OPS_PROJECT_STATE_DIR OPS_PROJECT_LOG_DIR OPS_PROJECT_RUN_DIR OPS_PROJECT_GENERATED_DIR OPS_PROJECT_CONFIG_DIR OPS_PROJECT_HISTORY_DIR OPS_PROFILES_DIR OPS_PROJECT_CONFIG_SETTINGS_FILE OPS_PROJECT_CONFIG_PROFILES_FILE
 
 setup_exists() {
   [[ -f "${OPS_SETUP_FILE}" ]]
@@ -74,6 +76,12 @@ setup_profile_validate() {
 setup_get() {
   local expr="${1:?setup_get: jq expression required}"
   local default="${2:-}"
+  if [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
+    require_bins jq
+    local config_value
+    config_value="$(jq -r ".setup${expr} // \"\"" "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" 2>/dev/null || true)"
+    [[ -n "${config_value}" && "${config_value}" != "null" ]] && { printf '%s' "${config_value}"; return 0; }
+  fi
   if ! setup_exists; then
     printf '%s' "${default}"
     return 0
@@ -118,7 +126,11 @@ setup_service_start_command() {
   local service_id="${1:?setup_service_start_command: service id required}"
   local command runner_kind stack
 
-  runner_kind="$(yq e ".services[] | select(.id == \"${service_id}\") | .runner.kind // \"\"" "${OPS_MANIFEST}" 2>/dev/null || true)"
+  if type manifest_get_service_field >/dev/null 2>&1; then
+    runner_kind="$(manifest_get_service_field "${service_id}" "runner.kind" 2>/dev/null || true)"
+  else
+    runner_kind="$(yq e ".services[] | select(.id == \"${service_id}\") | .runner.kind // \"\"" "${OPS_MANIFEST}" 2>/dev/null || true)"
+  fi
   if [[ "${runner_kind}" == "process_group" ]]; then
     printf ''
     return 0
@@ -174,6 +186,12 @@ setup_profile_get() {
   local profile="${1:?setup_profile_get: profile required}"
   local expr="${2:?setup_profile_get: jq expression required}"
   local default="${3:-}"
+  if [[ -f "${OPS_PROJECT_CONFIG_PROFILES_FILE}" ]]; then
+    require_bins jq
+    local config_value
+    config_value="$(jq -r ".profiles.\"${profile}\"${expr} // \"\"" "${OPS_PROJECT_CONFIG_PROFILES_FILE}" 2>/dev/null || true)"
+    [[ -n "${config_value}" && "${config_value}" != "null" ]] && { printf '%s' "${config_value}"; return 0; }
+  fi
   if ! setup_exists; then
     printf '%s' "${default}"
     return 0

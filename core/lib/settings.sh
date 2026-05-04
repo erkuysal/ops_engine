@@ -6,7 +6,9 @@ if [[ "${_OPS_CORE_SETTINGS_LOADED:-}" == "1" ]]; then return 0; fi
 _OPS_CORE_SETTINGS_LOADED=1
 
 OPS_SETTINGS_SOURCE="${OPS_MANIFEST}"
-export OPS_SETTINGS_SOURCE
+OPS_PROJECT_CONFIG_DIR="${OPS_PROJECT_CONFIG_DIR:-${OPS_PROJECT_ROOT}/.ops.project/config}"
+OPS_PROJECT_CONFIG_SETTINGS_FILE="${OPS_PROJECT_CONFIG_SETTINGS_FILE:-${OPS_PROJECT_CONFIG_DIR}/settings.json}"
+export OPS_SETTINGS_SOURCE OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SETTINGS_FILE
 
 settings_exists() {
   [[ -f "${OPS_SETTINGS_SOURCE}" ]]
@@ -21,6 +23,16 @@ settings_validate() {
 ops_setting_get() {
   local expr="${1:?ops_setting_get: jq expression required}"
   local default="${2:-}"
+
+  if [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
+    require_bins jq
+    local config_value
+    config_value="$(jq -r ".settings${expr} // \"\"" "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" 2>/dev/null || true)"
+    if [[ -n "${config_value}" && "${config_value}" != "null" ]]; then
+      printf '%s' "${config_value}"
+      return 0
+    fi
+  fi
 
   if ! settings_exists; then
     printf '%s' "${default}"

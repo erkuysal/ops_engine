@@ -67,7 +67,7 @@ if ! manifest_list_services | grep -qFx "${SVC_ID}"; then
   exit 2
 fi
 
-SVC_PATH="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC_ID}\") | .path")"
+SVC_PATH="$(manifest_get_service_field "${SVC_ID}" path)"
 if [[ -z "${SVC_PATH}" || "${SVC_PATH}" == "null" ]]; then
   ops_error "Service '${SVC_ID}' has no 'path' defined."
   exit 2
@@ -81,12 +81,12 @@ if [[ ! -d "${ABS_PATH}" ]]; then
   exit 3
 fi
 
-STACK="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC_ID}\") | .stack")"
+STACK="$(manifest_get_service_field "${SVC_ID}" stack)"
 if [[ -z "${STACK}" || "${STACK}" == "null" ]]; then
   ops_error "Service '${SVC_ID}' has no 'stack' defined."
   exit 2
 fi
-RUNNER_KIND="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC_ID}\") | .runner.kind")"
+RUNNER_KIND="$(manifest_get_service_field "${SVC_ID}" "runner.kind")"
 
 AUTO_CONDA_ENV=""
 if [[ "${ACTION}" == "start" && "${STACK}" == "django" && -z "${OPS_CONDA_ENV:-}" ]]; then
@@ -98,7 +98,7 @@ export OPS_SVC_PATH="${ABS_PATH}"
 export OPS_RUN_MODE="${MODE}"
 
 # We allow any arbitrary action, but we can look up the explicit string in manifest
-EXPLICIT_CMD="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC_ID}\") | .actions.${ACTION}")"
+EXPLICIT_CMD="$(manifest_get_service_field "${SVC_ID}" "actions.${ACTION}")"
 SETUP_CMD=""
 if [[ "${ACTION}" == "start" ]]; then
   SETUP_CMD="$(setup_service_start_command "${SVC_ID}")"

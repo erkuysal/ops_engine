@@ -228,7 +228,7 @@ _print_go_process_group_plan() {
   printf '  logs: .ops.project/logs/%s/<process>.log\n' "${SVC_ID}"
   printf '  pids: .ops.project/run/%s/<process>.pid\n' "${SVC_ID}"
   printf '  processes:\n'
-  manifest_get_field ".services[] | select(.id == \"${SVC_ID}\") | .run.processes[]?.name" 2>/dev/null |
+  manifest_get_service_list_field "${SVC_ID}" "run.processes.name" 2>/dev/null |
     while IFS= read -r proc; do
       [[ -n "${proc}" && "${proc}" != "null" ]] && printf '    - %s\n' "${proc}"
     done
@@ -246,7 +246,12 @@ fi
 printf '  path: %s\n' "${SVC_PATH}"
 printf '  working directory: %s\n' "${ABS_PATH}"
 printf '  action: %s\n' "${ACTION}"
-printf '  config source: %s\n' "${OPS_MANIFEST}"
+if project_config_services_exists; then
+  printf '  config source: %s\n' "${OPS_PROJECT_CONFIG_SERVICES_FILE#${OPS_PROJECT_ROOT}/}"
+  printf '  compatibility manifest: %s\n' "${OPS_MANIFEST}"
+else
+  printf '  config source: %s\n' "${OPS_MANIFEST}"
+fi
 printf '  state dir: %s\n' "${OPS_PROJECT_STATE_DIR}"
 printf '  setup profile: %s\n' "${SETUP_PROFILE}"
 

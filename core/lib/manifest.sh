@@ -23,6 +23,11 @@ export OPS_VALID_ENV_POLICIES
 OPS_VALID_ENV_MATERIALIZATIONS=(none symlink generated_file)
 export OPS_VALID_ENV_MATERIALIZATIONS
 
+OPS_PROJECT_CONFIG_DIR="${OPS_PROJECT_CONFIG_DIR:-${OPS_PROJECT_ROOT}/.ops.project/config}"
+OPS_PROJECT_CONFIG_SERVICES_FILE="${OPS_PROJECT_CONFIG_SERVICES_FILE:-${OPS_PROJECT_CONFIG_DIR}/services.json}"
+OPS_PROJECT_CONFIG_PROJECT_FILE="${OPS_PROJECT_CONFIG_PROJECT_FILE:-${OPS_PROJECT_CONFIG_DIR}/project.json}"
+export OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
+
 # ============================================================================
 # INTERNAL: yq wrapper — all manifest reads go through here
 # ============================================================================
@@ -52,6 +57,10 @@ manifest_exists() {
   [[ -f "${OPS_MANIFEST}" ]]
 }
 
+project_config_services_exists() {
+  [[ -f "${OPS_PROJECT_CONFIG_SERVICES_FILE}" ]]
+}
+
 # Abort with a helpful message if .ops.yaml does not exist.
 require_manifest() {
   if ! manifest_exists; then
@@ -64,9 +73,15 @@ require_manifest() {
 # Return 0 if a service with the given ID is declared in the manifest.
 manifest_service_exists() {
   local id="${1:?manifest_service_exists: service id required}"
-  require_manifest
-  local result
-  result="$(_manifest_yq ".services[] | select(.id == \"${id}\") | .id")"
+  local result=""
+  if project_config_services_exists; then
+    require_bins jq
+    result="$(jq -r --arg id "${id}" '.services[]? | select(.id == $id) | .id' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true)"
+  fi
+  if [[ -z "${result}" ]]; then
+    require_manifest
+    result="$(_manifest_yq ".services[] | select(.id == \"${id}\") | .id")"
+  fi
   [[ -n "${result}" ]]
 }
 
@@ -89,6 +104,11 @@ manifest_get_project_field() {
 
 # Print all declared service IDs, one per line.
 manifest_list_services() {
+  if project_config_services_exists; then
+    require_bins jq
+    jq -r '.services[]?.id' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true
+    return 0
+  fi
   require_manifest
   _manifest_yq '.services[].id'
 }
@@ -103,6 +123,16 @@ manifest_list_services() {
 manifest_get_service_field() {
   local id="${1:?manifest_get_service_field: service id required}"
   local field="${2:?manifest_get_service_field: field path required}"
+  local value=""
+  if project_config_services_exists; then
+    require_bins jq
+    value="$(jq -r --arg id "${id}" --arg field "${field}" '
+      def getpathstr($path):
+        getpath($path | split(".") | map(if test("^[0-9]+$") then tonumber else . end));
+      (.services[]? | select(.id == $id) | getpathstr($field)) // ""
+    ' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true)"
+    [[ -n "${value}" && "${value}" != "null" ]] && { printf '%s' "${value}"; return 0; }
+  fi
   require_manifest
   _manifest_yq_or_empty ".services[] | select(.id == \"${id}\") | .${field}"
 }
@@ -113,6 +143,21 @@ manifest_get_service_field() {
 manifest_get_service_list_field() {
   local id="${1:?manifest_get_service_list_field: service id required}"
   local field="${2:?manifest_get_service_list_field: field path required}"
+  if project_config_services_exists; then
+    require_bins jq
+    jq -r --arg id "${id}" --arg field "${field}" '
+      def getpathstr($path):
+        getpath($path | split(".") | map(if test("^[0-9]+$") then tonumber else . end));
+      .services[]?
+      | select(.id == $id)
+      | if ($field | endswith(".name")) then
+          (getpathstr($field | sub("\\.name$"; "")) // [] | .[]?.name)
+        else
+          (getpathstr($field) // [] | .[]?)
+        end
+    ' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true
+    return 0
+  fi
   require_manifest
   _manifest_yq ".services[] | select(.id == \"${id}\") | .${field}[]?" 2>/dev/null || true
 }

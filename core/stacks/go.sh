@@ -4,8 +4,12 @@
 set -euo pipefail
 
 _GO_STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/init.sh
+source "${_GO_STACK_DIR}/../lib/init.sh"
 # shellcheck source=../lib/cross_shell.sh
 source "${_GO_STACK_DIR}/../lib/cross_shell.sh"
+# shellcheck source=../lib/manifest.sh
+source "${_GO_STACK_DIR}/../lib/manifest.sh"
 
 _go_yq() {
   local expr="${1:?yq expression required}"
@@ -19,6 +23,11 @@ _go_service_expr() {
 
 _go_service_value() {
   local expr="${1:?service expression required}"
+  local field="${expr#.}"
+  if [[ "${field}" != *"[]"* && "${field}" != *" | "* ]]; then
+    manifest_get_service_field "${OPS_SERVICE_ID}" "${field}" 2>/dev/null || true
+    return 0
+  fi
   _go_service_expr "${expr} // \"\"" 2>/dev/null || true
 }
 
@@ -50,20 +59,32 @@ _go_target_arch() {
 }
 
 _go_process_names() {
-  _go_service_expr '.run.processes[]?.name' 2>/dev/null || true
+  manifest_get_service_list_field "${OPS_SERVICE_ID}" "run.processes.name" 2>/dev/null || true
 }
 
 _go_build_output_names() {
-  _go_service_expr '.build.outputs[]?.name' 2>/dev/null || true
+  manifest_get_service_list_field "${OPS_SERVICE_ID}" "build.outputs.name" 2>/dev/null || true
 }
 
 _go_build_output_package() {
   local name="$1"
+  if project_config_services_exists; then
+    jq -r --arg id "${OPS_SERVICE_ID}" --arg name "${name}" \
+      '.services[]? | select(.id == $id) | .build.outputs[]? | select(.name == $name) | .package // ""' \
+      "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true
+    return 0
+  fi
   _go_service_value ".build.outputs[] | select(.name == \"${name}\") | .package"
 }
 
 _go_process_command() {
   local name="$1"
+  if project_config_services_exists; then
+    jq -r --arg id "${OPS_SERVICE_ID}" --arg name "${name}" \
+      '.services[]? | select(.id == $id) | .run.processes[]? | select(.name == $name) | .command // ""' \
+      "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true
+    return 0
+  fi
   _go_service_value ".run.processes[] | select(.name == \"${name}\") | .command"
 }
 

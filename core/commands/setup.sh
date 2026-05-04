@@ -403,10 +403,16 @@ _generate_project_config_json_from_discovery() {
 
 _generate_services_config_json_from_discovery() {
   local discovery_json="$1" setup_json="$2"
+  local existing_services_json="[]"
+
+  if manifest_exists; then
+    existing_services_json="$(yq e -o=json '.services // []' "${OPS_MANIFEST}" 2>/dev/null || printf '[]')"
+  fi
 
   jq \
     --arg generated_at "$(ops_timestamp)" \
     --argjson setup "${setup_json}" \
+    --argjson existing_services "${existing_services_json}" \
     '{
       version: "1",
       generated_at: $generated_at,
@@ -414,17 +420,25 @@ _generate_services_config_json_from_discovery() {
       services: [
         .directories[]
         | select(.service == true)
+        | . as $directory
         | {
             id,
-            name: (.id | gsub("[_-]+"; " ") | split(" ") | map((.[0:1] | ascii_upcase) + .[1:]) | join(" ")),
+            name: (($existing_services[]? | select(.id == $directory.id) | .name) // (.id | gsub("[_-]+"; " ") | split(" ") | map((.[0:1] | ascii_upcase) + .[1:]) | join(" "))),
             stack,
             path,
             role,
             confidence,
             evidence,
-            runner: (if .role == "process_group" then {kind: "process_group"} else {kind: "stack"} end),
-            build: (.build // {}),
-            run: (if .role == "process_group" then {processes: ((.build.outputs // []) | map({name}))} else {} end),
+            runner: (($existing_services[]? | select(.id == $directory.id) | .runner) // (if .role == "process_group" then {kind: "process_group"} else {kind: "stack"} end)),
+            build: (($existing_services[]? | select(.id == $directory.id) | .build) // (.build // {})),
+            run: (($existing_services[]? | select(.id == $directory.id) | .run) // (if .role == "process_group" then {processes: ((.build.outputs // []) | map({name}))} else {} end)),
+            actions: (($existing_services[]? | select(.id == $directory.id) | .actions) // {}),
+            env_files: (($existing_services[]? | select(.id == $directory.id) | .env_files) // []),
+            env_policy: (($existing_services[]? | select(.id == $directory.id) | .env_policy) // ""),
+            env_materialization: (($existing_services[]? | select(.id == $directory.id) | .env_materialization) // ""),
+            env_output_file: (($existing_services[]? | select(.id == $directory.id) | .env_output_file) // ""),
+            depends_on: (($existing_services[]? | select(.id == $directory.id) | .depends_on) // []),
+            healthcheck: (($existing_services[]? | select(.id == $directory.id) | .healthcheck) // ""),
             setup: {
               command: ($setup.services[.id].command // ""),
               env_files: ($setup.services[.id].env_files // []),
@@ -442,16 +456,21 @@ _generate_services_config_json_from_discovery() {
 
 _materialize_project_config_from_discovery() {
   local discovery_json="$1" setup_json="$2" profile_json="$3"
+  local settings_json="{}"
 
   mkdir -p "${OPS_PROJECT_CONFIG_DIR}"
+  if manifest_exists; then
+    settings_json="$(yq e -o=json '.settings // {}' "${OPS_MANIFEST}" 2>/dev/null || printf '{}')"
+  fi
 
   _generate_project_config_json_from_discovery "${discovery_json}" > "${OPS_PROJECT_CONFIG_DIR}/project.json"
   _generate_services_config_json_from_discovery "${discovery_json}" "${setup_json}" > "${OPS_PROJECT_CONFIG_DIR}/services.json"
   jq -n \
     --arg generated_at "$(ops_timestamp)" \
     --arg source "setup_discovery" \
+    --argjson settings "${settings_json}" \
     --argjson setup "${setup_json}" \
-    '{version: "1", generated_at: $generated_at, source: $source, setup: $setup}' \
+    '{version: "1", generated_at: $generated_at, source: $source, settings: $settings, setup: $setup}' \
     > "${OPS_PROJECT_CONFIG_DIR}/settings.json"
   jq -n \
     --arg generated_at "$(ops_timestamp)" \
