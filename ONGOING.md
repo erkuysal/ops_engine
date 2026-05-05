@@ -17,6 +17,12 @@ The immediate goal is:
 - setup can apply discovery-derived setup into `.ops.project/config`
 - runtime helpers can prefer `.ops.project/config` over `.ops.yaml`
 - setup asks interactively only for ambiguous values
+- setup can bootstrap `.ops.project/config` and a transitional `.ops.yaml` when `.ops.yaml` is absent
+- setup can safely merge discovered runtime services back into `.ops.yaml`
+- legacy discovery commands route through setup/discovery
+- `ops install` installs a global Bash launcher instead of doing project setup
+- runtime commands write shared run-plan artifacts before display/execution
+- setup can preview/apply dependency decisions into project config
 
 ## Recently Completed
 
@@ -51,12 +57,58 @@ The immediate goal is:
 - Moved setup-generated metadata from root `scripts/` into `.ops.project/generated/`.
 - Added config-first readers for services, setup values, and runtime settings.
 - Updated `run`, `show`, and the Go process-group stack to use config-backed service data.
+- Added setup decision tracking in `.ops.project/config/decisions.json`.
+- Added first ambiguity handling for Go process groups:
+  - confirmed/existing processes stay enabled
+  - discovered webhook-like workers are marked ambiguous
+  - ambiguous processes are disabled by default unless interactive setup includes them
+- Added no-manifest `ops setup --apply` support that creates `.ops.project/config` and a transitional `.ops.yaml` from discovery.
+- Added `ops setup apply-services`:
+  - previews discovered runtime services
+  - shows services removed from runtime
+  - applies the merged service list only with `--apply`
+  - preserves confirmed service fields where possible
+- Removed `api_core` from the runtime service list because discovery classifies it as a shared library.
+- Replaced old `bootstrap`, `init`, and `update` implementations with compatibility wrappers around setup:
+  - `bootstrap --dry-run` -> `setup --dry-run`
+  - `bootstrap --force` -> `setup apply-services --apply`
+  - `init --dry-run` -> `setup apply-services`
+  - `init` -> `setup apply-services --apply`
+  - `update` -> `setup apply-services`
+  - `update --apply` -> `setup apply-services --apply`
+- Removed the legacy setup preview from `setup --dry-run`.
+- Redesigned `ops install`:
+  - `ops install` writes a managed universal `ops` launcher
+  - package files are copied into a stable package directory
+  - `ops install doctor` checks launcher/source/PATH/shell status
+  - `ops install repair` rewrites the managed launcher
+  - `ops install update` refreshes the installed package and launcher from the current checkout
+  - `ops install uninstall` removes the managed launcher
+  - installed package metadata records package format, ops core version, source root, source revision, install time, and update time
+  - install is separate from project setup and tells users to run `ops setup --apply` inside projects
+  - launcher discovers project-local `.ops/core/main.sh`, otherwise falls back to the installed package core against the current directory
+- Added first-pass runtime plan generation:
+  - `.ops/core/lib/run_plan.sh`
+  - `ops show <action> <service>` writes `.ops.project/generated/run-plans/<service>.<action>.json`
+  - `ops run <action> <service>` writes the same kind of plan before execution
+  - run plans include config source, selected runner, candidate runners, stack dispatcher, setup values, runtime paths, build outputs, and Go process-group entries
+- Updated `ops run` to dispatch from the generated plan's `resolution.selected.strategy`:
+  - overrides run from selected override paths
+  - setup commands run from the selected setup command
+  - stack-backed plans use the selected stack dispatcher
+  - legacy bridge plans can run directly from the selected legacy target
+- Reintroduced dependency handling under setup:
+  - `ops setup dependencies` previews dependency decisions
+  - `ops setup dependencies --interactive` interviews service dependencies
+  - `ops setup dependencies --apply` writes dependency decisions to `.ops.project/config/decisions.json`
+  - selected dependencies are materialized into `.ops.project/config/services.json`
+  - setup preserves existing `.ops.yaml` service fields while config is regenerated
 
 ## Active Problems
 
 ### 1. `setup` Is Not Yet The Main Initializer
 
-Current behavior is split:
+Previous behavior was split:
 
 - `bootstrap` creates a first `.ops.yaml`
 - `init` compares detection against an existing `.ops.yaml`
@@ -66,6 +118,13 @@ Current behavior is split:
 Target behavior:
 
 - `setup` should own discovery, project config creation, `.ops.project`, and interactive fallback.
+
+Status: largely resolved for discovery/service setup
+
+Notes:
+
+- `bootstrap`, `init`, and `update` now delegate to setup-backed commands.
+- Dependency interview behavior from old `init` is not carried forward yet.
 
 ### 2. Detection Is Too Shallow
 
@@ -214,6 +273,9 @@ Notes:
 - Existing confirmed runtime values such as Python manager/env are preserved during apply.
 - `.ops.yaml services` is not rewritten yet; that remains a separate, higher-risk merge step.
 - Legacy metadata files are now generated under `.ops.project/generated` instead of root `scripts/`.
+- If `.ops.yaml` is absent, `setup --apply` can now create project config and a transitional manifest from discovery.
+- Ambiguous process-group outputs are recorded in `.ops.project/config/decisions.json`.
+- `ops setup apply-services --apply` now updates `.ops.yaml services` from discovery and skips non-runtime roles.
 
 ### Slice 5: `.ops.project/config`
 
@@ -239,6 +301,7 @@ Notes:
 - Runtime helper reads now prefer `.ops.project/config` for service list/fields, setup values, and settings.
 - `.ops.yaml` remains the compatibility fallback and validation target for now.
 - `ops show` reports when service config is coming from `.ops.project/config/services.json`.
+- `.ops.project/config/decisions.json` records setup decisions such as whether a discovered process belongs in local runtime.
 
 ### Slice 6: Runtime Plans
 
@@ -253,7 +316,15 @@ Tasks:
 - Make `ops show` display run plans.
 - Make runtime commands execute selected plans.
 
-Status: pending
+Status: first pass completed
+
+Notes:
+
+- Run plans are now generated as JSON under `.ops.project/generated/run-plans/`.
+- `show` exposes the generated plan path.
+- `run` generates the plan before preflight/env materialization and reads core service facts from the generated plan.
+- `run` now dispatches from `resolution.selected.strategy` in the generated plan.
+- Stack-backed strategies still execute through the stack dispatcher because that is where stack-specific behavior and process groups live.
 
 ### Slice 7: Global Install
 
@@ -264,7 +335,19 @@ Tasks:
 - Add global install doctor/repair.
 - Keep project setup separate from install.
 
-Status: pending
+Status: first pass completed
+
+Notes:
+
+- `ops install` now installs a universal Bash launcher into `~/.local/bin` by default.
+- `--prefix` and `--bin-dir` are supported.
+- `--package-dir` is supported and defaults to `~/.local/share/ops`.
+- `doctor`, `repair`, and `uninstall` are implemented.
+- Current installer copies the `.ops` package to the package directory and points the launcher there.
+- Package metadata is written to `.ops-install-source`.
+- `ops install doctor` reports source/package version information.
+- `ops install update` refreshes the managed package and rewrites the launcher.
+- `ops version` reports installed package metadata when running from a packaged core.
 
 ## Verification Commands
 
@@ -291,7 +374,7 @@ bash ops.sh update
 Known current issue:
 
 ```text
-bootstrap/init/update incorrectly propose frontend as a Node service.
+Dependency inference is still mostly user-confirmed/preserved; automatic dependency inference remains future work.
 ```
 
 ## Open Decisions

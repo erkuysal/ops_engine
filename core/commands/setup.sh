@@ -22,6 +22,8 @@ Usage: ops setup [--profile NAME] [--dry-run] [--apply]
        ops setup init [--profile NAME] [--apply]
        ops setup --interactive [--profile NAME] [--apply]
        ops setup discover [--apply]
+       ops setup apply-services [--apply]
+       ops setup dependencies [--interactive] [--apply]
        ops setup show [--profile NAME]
        ops setup doctor [--profile NAME]
 
@@ -29,6 +31,7 @@ Generates and validates project setup values:
   .ops.yaml setup/settings/profiles sections
   .ops.project/ generated state directories
   .ops.project/config project memory files
+  .ops.project/config/decisions.json interactive/default setup decisions
   .ops.project/generated/discovery.json workspace discovery cache
   .ops.project/generated/project_structure.json and project_values.json metadata
 
@@ -44,7 +47,7 @@ if [[ $# -gt 0 ]]; then
       INTERACTIVE=true
       shift
       ;;
-    discover|show|doctor|help|--help|-h)
+    discover|apply-services|dependencies|show|doctor|help|--help|-h)
       SUBCMD="$1"
       shift
       ;;
@@ -204,6 +207,253 @@ _generate_profile_json() {
   jq -n '{remote: {host: "", user: "", path: "", ssh_key_path: ""}, docker: {network: "", compose_files: []}, healthchecks: {}, certificates: {provider: "", domain: ""}}'
 }
 
+_manifest_service_process_exists() {
+  local id="$1" name="$2"
+  manifest_exists || return 1
+  yq e ".services[] | select(.id == \"${id}\") | .run.processes[]?.name" "${OPS_MANIFEST}" 2>/dev/null |
+    grep -qFx "${name}"
+}
+
+_process_output_default_enabled() {
+  local id="$1" name="$2"
+
+  if manifest_exists; then
+    if _manifest_service_process_exists "${id}" "${name}"; then
+      printf 'true'
+    else
+      printf 'false'
+    fi
+    return 0
+  fi
+
+  case "${name}" in
+    webhook|*webhook*) printf 'false' ;;
+    *) printf 'true' ;;
+  esac
+}
+
+_process_output_is_ambiguous() {
+  local id="$1" name="$2"
+
+  case "${name}" in
+    webhook|*webhook*) return 0 ;;
+  esac
+
+  if manifest_exists && ! _manifest_service_process_exists "${id}" "${name}"; then
+    return 0
+  fi
+
+  return 1
+}
+
+_resolve_process_decisions_json() {
+  local discovery_json="$1"
+  local decisions_json='[]'
+  local process_entries=()
+
+  mapfile -t process_entries < <(jq -r '
+    .directories[]
+    | select(.service == true and .role == "process_group")
+    | .id as $id
+    | (.build.outputs // [])[]
+    | [$id, .name, .package]
+    | @tsv
+  ' <<< "${discovery_json}")
+
+  local entry
+  for entry in "${process_entries[@]}"; do
+    IFS=$'\t' read -r id name package <<< "${entry}"
+    [[ -z "${id}" || -z "${name}" ]] && continue
+    local default_enabled enabled ambiguous reason
+    default_enabled="$(_process_output_default_enabled "${id}" "${name}")"
+    enabled="${default_enabled}"
+    ambiguous=false
+    reason="default"
+
+    if _process_output_is_ambiguous "${id}" "${name}"; then
+      ambiguous=true
+      reason="ambiguous_process"
+      if [[ "${INTERACTIVE}" == "true" ]]; then
+        local default_answer="n"
+        [[ "${default_enabled}" == "true" ]] && default_answer="y"
+        if _prompt_yes_no "Include process '${id}/${name}' in local runtime?" "${default_answer}"; then
+          enabled=true
+        else
+          enabled=false
+        fi
+        reason="interactive"
+      fi
+    fi
+
+    decisions_json="$(jq \
+      --arg id "${id}" \
+      --arg name "${name}" \
+      --arg package "${package}" \
+      --argjson enabled "${enabled}" \
+      --argjson ambiguous "${ambiguous}" \
+      --arg reason "${reason}" \
+      '. + [{type: "process", service: $id, name: $name, package: $package, enabled: $enabled, ambiguous: $ambiguous, reason: $reason}]' \
+      <<< "${decisions_json}")"
+  done
+
+  jq -n \
+    --arg generated_at "$(ops_timestamp)" \
+    --argjson decisions "${decisions_json}" \
+    '{version: "1", generated_at: $generated_at, decisions: $decisions}'
+}
+
+_apply_discovery_decisions_json() {
+  local discovery_json="$1" decisions_json="$2"
+
+  jq \
+    --argjson decisions "${decisions_json}" \
+    '
+      .directories |= map(
+        if .service == true and .role == "process_group" then
+          . as $service
+          | .build.outputs = (
+              (.build.outputs // [])
+              | map(
+                  . as $output
+                  | ($decisions.decisions[]? | select(.type == "process" and .service == $service.id and .name == $output.name)) as $decision
+                  | . + {
+                      enabled: (if $decision == null or ($decision | has("enabled") | not) then true else $decision.enabled end),
+                      ambiguous: (if $decision == null or ($decision | has("ambiguous") | not) then false else $decision.ambiguous end),
+                      decision_reason: ($decision.reason // "default")
+                    }
+                )
+            )
+        else
+          .
+        end
+      )
+    ' <<< "${discovery_json}"
+}
+
+_json_array_to_space() {
+  jq -r '(. // []) | join(" ")'
+}
+
+_service_dependency_default_json() {
+  local service_id="$1"
+  local deps_json=""
+
+  if [[ -f "${OPS_PROJECT_CONFIG_SERVICES_FILE:-}" ]]; then
+    deps_json="$(jq -c --arg id "${service_id}" '
+      (.services[]? | select(.id == $id) | .depends_on) // []
+    ' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true)"
+  fi
+
+  if [[ -z "${deps_json}" || "${deps_json}" == "null" ]] && manifest_exists; then
+    deps_json="$(yq e -o=json ".services[] | select(.id == \"${service_id}\") | .depends_on // []" "${OPS_MANIFEST}" 2>/dev/null || true)"
+  fi
+
+  [[ -n "${deps_json}" && "${deps_json}" != "null" ]] && printf '%s' "${deps_json}" || printf '[]'
+}
+
+_dependency_reply_to_json() {
+  local reply="$1" service_id="$2" valid_ids="$3"
+  local deps_json="[]"
+  local dep
+
+  for dep in ${reply}; do
+    [[ -z "${dep}" ]] && continue
+    if [[ "${dep}" == "${service_id}" ]]; then
+      printf 'Service %s cannot depend on itself.\n' "${service_id}" >&2
+      return 1
+    fi
+    if ! printf ' %s ' "${valid_ids}" | grep -qF " ${dep} "; then
+      printf "Unknown dependency '%s'. Valid service ids: %s\n" "${dep}" "${valid_ids}" >&2
+      return 1
+    fi
+    deps_json="$(jq -c --arg dep "${dep}" 'if index($dep) then . else . + [$dep] end' <<< "${deps_json}")"
+  done
+
+  printf '%s' "${deps_json}"
+}
+
+_dependency_prompt_value() {
+  local label="$1" default="${2:-}" value
+  if [[ -n "${default}" ]]; then
+    printf '%s [%s]: ' "${label}" "${default}" >&2
+  else
+    printf '%s: ' "${label}" >&2
+  fi
+  read -r value
+  printf '%s' "${value:-${default}}"
+}
+
+_resolve_dependency_decisions_json() {
+  local discovery_json="$1" decisions_json="$2"
+  local valid_ids dependency_decisions="[]"
+  local service_entries=()
+
+  valid_ids="$(jq -r '[.directories[] | select(.service == true) | .id] | join(" ")' <<< "${discovery_json}")"
+
+  mapfile -t service_entries < <(jq -r '
+    .directories[]
+    | select(.service == true)
+    | [.id, .path, .role]
+    | @tsv
+  ' <<< "${discovery_json}")
+
+  local entry
+  for entry in "${service_entries[@]}"; do
+    IFS=$'\t' read -r id path role <<< "${entry}"
+    [[ -z "${id}" || "${id}" == "null" ]] && continue
+    local default_deps default_text deps_json reason confirmed reply
+
+    default_deps="$(_service_dependency_default_json "${id}")"
+    default_text="$(_json_array_to_space <<< "${default_deps}")"
+    deps_json="${default_deps}"
+    reason="default"
+    confirmed=false
+
+    if [[ -n "${default_text}" ]]; then
+      reason="preserved"
+    fi
+
+    if [[ "${INTERACTIVE}" == "true" ]]; then
+      while true; do
+        reply="$(_dependency_prompt_value "Dependencies for '${id}' (valid: ${valid_ids}; space-separated)" "${default_text}")"
+        if deps_json="$(_dependency_reply_to_json "${reply}" "${id}" "${valid_ids}")"; then
+          break
+        fi
+      done
+      reason="interactive"
+      confirmed=true
+    fi
+
+    dependency_decisions="$(jq \
+      --arg id "${id}" \
+      --arg path "${path}" \
+      --arg role "${role}" \
+      --arg reason "${reason}" \
+      --argjson confirmed "${confirmed}" \
+      --argjson dependencies "${deps_json}" \
+      '. + [{type: "dependency", service: $id, path: $path, role: $role, dependencies: $dependencies, confirmed: $confirmed, reason: $reason}]' \
+      <<< "${dependency_decisions}")"
+  done
+
+  jq -n \
+    --arg generated_at "$(ops_timestamp)" \
+    --argjson existing "${decisions_json}" \
+    --argjson dependency_decisions "${dependency_decisions}" \
+    '{
+      version: "1",
+      generated_at: $generated_at,
+      decisions: ((($existing.decisions // []) | map(select(.type != "dependency"))) + $dependency_decisions)
+    }'
+}
+
+_resolve_setup_decisions_json() {
+  local discovery_json="$1"
+  local decisions_json
+
+  decisions_json="$(_resolve_process_decisions_json "${discovery_json}")"
+  _resolve_dependency_decisions_json "${discovery_json}" "${decisions_json}"
+}
+
 _discovery_human_name() {
   local id="$1"
   awk -v value="${id}" 'BEGIN {
@@ -257,14 +507,14 @@ _discovery_services_yaml() {
         printf '      target_os: linux\n'
         printf '      target_arch: amd64\n'
         printf '      outputs:\n'
-        jq -r '.build.outputs[]? | [.name, .package] | @tsv' <<< "${entry}" |
+        jq -r '.build.outputs[]? | select(.enabled != false) | [.name, .package] | @tsv' <<< "${entry}" |
           while IFS=$'\t' read -r out_name package; do
             printf '        - name: %s\n' "${out_name}"
             printf '          package: %s\n' "${package}"
           done
         printf '    run:\n'
         printf '      processes:\n'
-        jq -r '.build.outputs[]?.name' <<< "${entry}" |
+        jq -r '.build.outputs[]? | select(.enabled != false) | .name' <<< "${entry}" |
           while IFS= read -r proc; do
             [[ -n "${proc}" && "${proc}" != "null" ]] && printf '        - name: %s\n' "${proc}"
           done
@@ -401,18 +651,30 @@ _generate_project_config_json_from_discovery() {
     }'
 }
 
+_default_settings_json() {
+  jq -n '{
+    run: {default_mode: "foreground"},
+    start: {mode: "foreground", with_deps: true, preview: {enabled: true, lines: 20, wait_seconds: 1}}
+  }'
+}
+
 _generate_services_config_json_from_discovery() {
-  local discovery_json="$1" setup_json="$2"
+  local discovery_json="$1" setup_json="$2" decisions_json="${3:-}"
   local existing_services_json="[]"
 
   if manifest_exists; then
     existing_services_json="$(yq e -o=json '.services // []' "${OPS_MANIFEST}" 2>/dev/null || printf '[]')"
+  elif project_config_services_exists; then
+    existing_services_json="$(jq -c '.services // []' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || printf '[]')"
   fi
+  [[ -n "${existing_services_json}" && "${existing_services_json}" != "null" ]] || existing_services_json="[]"
+  [[ -n "${decisions_json}" ]] || decisions_json='{"decisions":[]}'
 
   jq \
     --arg generated_at "$(ops_timestamp)" \
     --argjson setup "${setup_json}" \
     --argjson existing_services "${existing_services_json}" \
+    --argjson decisions "${decisions_json}" \
     '{
       version: "1",
       generated_at: $generated_at,
@@ -430,14 +692,14 @@ _generate_services_config_json_from_discovery() {
             confidence,
             evidence,
             runner: (($existing_services[]? | select(.id == $directory.id) | .runner) // (if .role == "process_group" then {kind: "process_group"} else {kind: "stack"} end)),
-            build: (($existing_services[]? | select(.id == $directory.id) | .build) // (.build // {})),
-            run: (($existing_services[]? | select(.id == $directory.id) | .run) // (if .role == "process_group" then {processes: ((.build.outputs // []) | map({name}))} else {} end)),
+            build: (($existing_services[]? | select(.id == $directory.id) | .build) // (.build // {} | .outputs = ((.outputs // []) | map(select(.enabled != false) | {name, package})))),
+            run: (($existing_services[]? | select(.id == $directory.id) | .run) // (if .role == "process_group" then {processes: ((.build.outputs // []) | map(select(.enabled != false) | {name}))} else {} end)),
             actions: (($existing_services[]? | select(.id == $directory.id) | .actions) // {}),
             env_files: (($existing_services[]? | select(.id == $directory.id) | .env_files) // []),
             env_policy: (($existing_services[]? | select(.id == $directory.id) | .env_policy) // ""),
             env_materialization: (($existing_services[]? | select(.id == $directory.id) | .env_materialization) // ""),
             env_output_file: (($existing_services[]? | select(.id == $directory.id) | .env_output_file) // ""),
-            depends_on: (($existing_services[]? | select(.id == $directory.id) | .depends_on) // []),
+            depends_on: (($decisions.decisions[]? | select(.type == "dependency" and .service == $directory.id) | .dependencies) // (($existing_services[]? | select(.id == $directory.id) | .depends_on) // [])),
             healthcheck: (($existing_services[]? | select(.id == $directory.id) | .healthcheck) // ""),
             setup: {
               command: ($setup.services[.id].command // ""),
@@ -455,16 +717,23 @@ _generate_services_config_json_from_discovery() {
 }
 
 _materialize_project_config_from_discovery() {
-  local discovery_json="$1" setup_json="$2" profile_json="$3"
-  local settings_json="{}"
+  local discovery_json="$1" setup_json="$2" profile_json="$3" decisions_json="${4:-}"
+  local settings_json="{}" services_tmp
 
   mkdir -p "${OPS_PROJECT_CONFIG_DIR}"
   if manifest_exists; then
     settings_json="$(yq e -o=json '.settings // {}' "${OPS_MANIFEST}" 2>/dev/null || printf '{}')"
+  else
+    settings_json="$(_default_settings_json)"
   fi
 
   _generate_project_config_json_from_discovery "${discovery_json}" > "${OPS_PROJECT_CONFIG_DIR}/project.json"
-  _generate_services_config_json_from_discovery "${discovery_json}" "${setup_json}" > "${OPS_PROJECT_CONFIG_DIR}/services.json"
+  services_tmp="$(mktemp)"
+  _generate_services_config_json_from_discovery "${discovery_json}" "${setup_json}" "${decisions_json}" > "${services_tmp}"
+  mv "${services_tmp}" "${OPS_PROJECT_CONFIG_DIR}/services.json"
+  if [[ -n "${decisions_json}" ]]; then
+    printf '%s\n' "${decisions_json}" > "${OPS_PROJECT_CONFIG_DIR}/decisions.json"
+  fi
   jq -n \
     --arg generated_at "$(ops_timestamp)" \
     --arg source "setup_discovery" \
@@ -481,8 +750,107 @@ _materialize_project_config_from_discovery() {
 
   ops_ok "Materialized .ops.project/config/project.json"
   ops_ok "Materialized .ops.project/config/services.json"
+  [[ -n "${decisions_json}" ]] && ops_ok "Materialized .ops.project/config/decisions.json"
   ops_ok "Materialized .ops.project/config/settings.json"
   ops_ok "Materialized .ops.project/config/profiles.json"
+}
+
+_generate_manifest_json_from_discovery() {
+  local discovery_json="$1" setup_json="$2" profile_json="$3" decisions_json="${4:-}"
+  local project_name settings_json services_config
+
+  project_name="$(basename "${OPS_PROJECT_ROOT}")"
+  settings_json="$(_default_settings_json)"
+  services_config="$(_generate_services_config_json_from_discovery "${discovery_json}" "${setup_json}" "${decisions_json}")"
+
+  jq -n \
+    --arg project_name "${project_name}" \
+    --arg profile "${PROFILE}" \
+    --arg generated_at "$(ops_timestamp)" \
+    --argjson settings "${settings_json}" \
+    --argjson setup "${setup_json}" \
+    --argjson profile_config "${profile_json}" \
+    --argjson services_config "${services_config}" \
+    '{
+      version: "1",
+      project: {
+        name: $project_name,
+        global_env_files: [],
+        defaults: {env_policy: "dev_file"}
+      },
+      services: ($services_config.services | map(
+        {
+          id,
+          name,
+          stack,
+          path,
+          env_files: (.env_files // []),
+          env_policy: ((.env_policy // "") | if . == "" then "dev_file" else . end),
+          env_materialization: ((.env_materialization // "") | if . == "" then "none" else . end),
+          env_output_file: (.env_output_file // ""),
+          actions: ((.actions // {}) + {start: (.actions.start // ""), stop: (.actions.stop // ""), logs: (.actions.logs // ""), build: (.actions.build // ""), test: (.actions.test // ""), lint: (.actions.lint // "")}),
+          depends_on: (.depends_on // []),
+          healthcheck: (.healthcheck // ""),
+          meta: {
+            source: "setup_discovery",
+            role: .role,
+            confirmed_by_user: false,
+            generated_at: $generated_at
+          }
+        }
+        + (if .runner.kind == "process_group" then {runner: .runner, build: .build, run: .run} else {} end)
+      )),
+      settings: $settings,
+      setup: $setup,
+      profiles: {($profile): $profile_config}
+    }'
+}
+
+_manifest_services_json_from_config() {
+  local services_config="$1"
+
+  jq \
+    --arg generated_at "$(ops_timestamp)" \
+    '
+      .services
+      | map(
+          {
+            id,
+            name,
+            stack,
+            path,
+            env_files: (.env_files // []),
+            env_policy: ((.env_policy // "") | if . == "" then "dev_file" else . end),
+            env_materialization: ((.env_materialization // "") | if . == "" then "none" else . end),
+            env_output_file: (.env_output_file // ""),
+            actions: ((.actions // {}) + {
+              start: (.actions.start // ""),
+              stop: (.actions.stop // ""),
+              logs: (.actions.logs // ""),
+              build: (.actions.build // ""),
+              test: (.actions.test // ""),
+              lint: (.actions.lint // "")
+            }),
+            depends_on: (.depends_on // []),
+            healthcheck: (.healthcheck // ""),
+            meta: {
+              source: "setup_discovery",
+              role: .role,
+              confirmed_by_user: false,
+              generated_at: $generated_at
+            }
+          }
+          + (if .runner.kind == "process_group" then {runner: .runner, build: .build, run: .run} else {} end)
+        )
+    ' <<< "${services_config}"
+}
+
+_write_manifest_from_discovery() {
+  local discovery_json="$1" setup_json="$2" profile_json="$3" decisions_json="${4:-}"
+
+  _generate_manifest_json_from_discovery "${discovery_json}" "${setup_json}" "${profile_json}" "${decisions_json}" |
+    yq e -P - > "${OPS_MANIFEST}"
+  ops_ok "Created .ops.yaml from discovery"
 }
 
 _print_discovery_preview() {
@@ -537,20 +905,66 @@ _print_discovery_preview() {
     while IFS=$'\t' read -r id path role; do
       printf '  - %-14s %-34s %s\n' "${id}" "${path}" "${role}"
     done
+
+  printf '\nAmbiguous Runtime Decisions\n'
+  local decision_lines
+  decision_lines="$(jq -r '
+    .directories[]
+    | select(.service == true and .role == "process_group")
+    | .id as $id
+    | (.build.outputs // [])[]
+    | select(.ambiguous == true or .enabled == false)
+    | [$id, .name, (if .enabled == false then "disabled" else "enabled" end), (.decision_reason // "default")]
+    | @tsv
+  ' <<< "${discovery_json}")"
+  if [[ -n "${decision_lines}" ]]; then
+    printf '%s\n' "${decision_lines}" |
+    while IFS=$'\t' read -r id name state reason; do
+      printf '  ? %-14s %-18s %-9s %s\n' "${id}" "${name}" "${state}" "${reason}"
+    done
+  else
+    printf '  none\n'
+  fi
+}
+
+_print_dependency_decisions_preview() {
+  local decisions_json="$1"
+
+  printf '\nDependency Decisions\n'
+  local lines
+  lines="$(jq -r '
+    (.decisions // [])
+    | map(select(.type == "dependency"))
+    | .[]
+    | [.service, (((.dependencies // []) | join(", ")) | if . == "" then "<none>" else . end), (.reason // "default"), ((.confirmed // false) | tostring)]
+    | @tsv
+  ' <<< "${decisions_json}")"
+  if [[ -n "${lines}" ]]; then
+    printf '%s\n' "${lines}" |
+      while IFS=$'\t' read -r service deps reason confirmed; do
+        printf '  %-14s depends_on: %-24s reason=%s confirmed=%s\n' "${service}" "${deps}" "${reason}" "${confirmed}"
+      done
+  else
+    printf '  none\n'
+  fi
 }
 
 _run_discovery() {
   require_bins jq
-  local discovery_json discovery_file
+  local discovery_json decisions_json discovery_file
 
   ops_section "ops setup discover"
   discovery_json="$(discovery_scan_project_json)"
+  decisions_json="$(_resolve_setup_decisions_json "${discovery_json}")"
+  discovery_json="$(_apply_discovery_decisions_json "${discovery_json}" "${decisions_json}")"
   _print_discovery_preview "${discovery_json}"
+  _print_dependency_decisions_preview "${decisions_json}"
 
   if [[ "${APPLY}" == "true" ]]; then
     ensure_dir "${OPS_PROJECT_STATE_DIR}"
     ensure_dir "${OPS_PROJECT_GENERATED_DIR}"
-    discovery_file="$(discovery_write_project_json)"
+    printf '%s\n' "${discovery_json}" > "${OPS_DISCOVERY_FILE}"
+    discovery_file="${OPS_DISCOVERY_FILE}"
     printf '\n'
     ops_ok "Wrote ${discovery_file#${OPS_PROJECT_ROOT}/}"
   else
@@ -568,6 +982,115 @@ _print_discovery_config_proposal() {
 
   printf '\nProposed .ops.yaml setup from discovery:\n'
   _generate_setup_json_from_discovery "${discovery_json}" | yq e -P -
+}
+
+_print_service_merge_summary() {
+  local services_json="$1"
+
+  printf '\nCurrent manifest services:\n'
+  if manifest_exists; then
+    yq e -r '.services[].id' "${OPS_MANIFEST}" 2>/dev/null |
+      while IFS= read -r id; do
+        [[ -n "${id}" && "${id}" != "null" ]] && printf '  - %s\n' "${id}"
+      done
+  else
+    printf '  none\n'
+  fi
+
+  printf '\nProposed runtime services:\n'
+  jq -r '.[].id' <<< "${services_json}" |
+    while IFS= read -r id; do
+      [[ -n "${id}" && "${id}" != "null" ]] && printf '  + %s\n' "${id}"
+    done
+
+  printf '\nRemoved from runtime services:\n'
+  local removed
+  removed="$(jq -r -n \
+    --argjson current "$(yq e -o=json '[.services[].id] // []' "${OPS_MANIFEST}" 2>/dev/null || printf '[]')" \
+    --argjson proposed "$(jq '[.[].id]' <<< "${services_json}")" \
+    '$current - $proposed | .[]?' 2>/dev/null || true)"
+  if [[ -n "${removed}" ]]; then
+    printf '%s\n' "${removed}" | while IFS= read -r id; do printf '  - %s\n' "${id}"; done
+  else
+    printf '  none\n'
+  fi
+}
+
+_run_apply_services() {
+  require_bins jq yq
+  require_manifest
+
+  local discovery_json decisions_json setup_json profile_json services_config services_json services_tmp
+
+  ops_section "ops setup apply-services"
+  discovery_json="$(discovery_scan_project_json)"
+  decisions_json="$(_resolve_setup_decisions_json "${discovery_json}")"
+  discovery_json="$(_apply_discovery_decisions_json "${discovery_json}" "${decisions_json}")"
+  setup_json="$(_generate_setup_json_from_discovery "${discovery_json}")"
+  profile_json="$(_generate_profile_json "${PROFILE}")"
+  services_config="$(_generate_services_config_json_from_discovery "${discovery_json}" "${setup_json}")"
+  services_json="$(_manifest_services_json_from_config "${services_config}")"
+
+  _print_discovery_preview "${discovery_json}"
+  _print_dependency_decisions_preview "${decisions_json}"
+  _print_service_merge_summary "${services_json}"
+
+  printf '\nProposed .ops.yaml services:\n'
+  yq e -P - <<< "${services_json}"
+
+  if [[ "${APPLY}" != "true" ]]; then
+    printf '\n'
+    ops_info "Preview only. Use --apply to replace .ops.yaml services with discovered runtime services."
+    return 0
+  fi
+
+  services_tmp="$(mktemp)"
+  printf '%s\n' "${services_json}" > "${services_tmp}"
+  _backup_file "${OPS_MANIFEST}"
+  yq e -i ".services = load(\"${services_tmp}\")" "${OPS_MANIFEST}"
+  yq e -P -i '.' "${OPS_MANIFEST}"
+  rm -f "${services_tmp}"
+
+  mkdir -p "${OPS_PROJECT_STATE_DIR}" "${OPS_PROFILES_DIR}" "${OPS_PROJECT_GENERATED_DIR}" "${OPS_PROJECT_CONFIG_DIR}" "${OPS_PROJECT_LOG_DIR}" "${OPS_PROJECT_RUN_DIR}"
+  printf '%s\n' "${discovery_json}" > "${OPS_DISCOVERY_FILE}"
+  _materialize_project_config_from_discovery "${discovery_json}" "${setup_json}" "${profile_json}" "${decisions_json}"
+  printf '%s\n' "${setup_json}" > "${OPS_PROJECT_GENERATED_DIR}/setup.json"
+  printf '%s\n' "${profile_json}" > "$(setup_profile_file "${PROFILE}")"
+  _materialize_project_structure_reference
+  _materialize_project_values_metadata
+
+  ops_ok "Updated .ops.yaml services from discovery"
+}
+
+_run_dependencies() {
+  require_bins jq yq
+
+  local discovery_json decisions_json setup_json profile_json services_config
+
+  ops_section "ops setup dependencies"
+  discovery_json="$(discovery_scan_project_json)"
+  decisions_json="$(_resolve_setup_decisions_json "${discovery_json}")"
+  discovery_json="$(_apply_discovery_decisions_json "${discovery_json}" "${decisions_json}")"
+  setup_json="$(_generate_setup_json_from_discovery "${discovery_json}")"
+  profile_json="$(_generate_profile_json "${PROFILE}")"
+  services_config="$(_generate_services_config_json_from_discovery "${discovery_json}" "${setup_json}" "${decisions_json}")"
+
+  _print_dependency_decisions_preview "${decisions_json}"
+
+  if [[ "${APPLY}" != "true" ]]; then
+    printf '\n'
+    ops_info "Preview only. Use --interactive to answer dependency prompts and --apply to write .ops.project/config."
+    return 0
+  fi
+
+  mkdir -p "${OPS_PROJECT_STATE_DIR}" "${OPS_PROFILES_DIR}" "${OPS_PROJECT_GENERATED_DIR}" "${OPS_PROJECT_CONFIG_DIR}" "${OPS_PROJECT_LOG_DIR}" "${OPS_PROJECT_RUN_DIR}"
+  printf '%s\n' "${discovery_json}" > "${OPS_DISCOVERY_FILE}"
+  _materialize_project_config_from_discovery "${discovery_json}" "${setup_json}" "${profile_json}" "${decisions_json}"
+  printf '%s\n' "${setup_json}" > "${OPS_PROJECT_GENERATED_DIR}/setup.json"
+  printf '%s\n' "${profile_json}" > "$(setup_profile_file "${PROFILE}")"
+
+  ops_ok "Updated dependency decisions in .ops.project/config/decisions.json"
+  ops_ok "Updated service dependencies in .ops.project/config/services.json"
 }
 
 _interactive_profile_json() {
@@ -740,16 +1263,31 @@ _backup_file() {
 }
 
 _apply_generated() {
-  local setup_tmp profile_tmp discovery_tmp discovery_file
+  local setup_tmp profile_tmp discovery_tmp decisions_tmp discovery_file had_manifest=false
   require_bins jq yq
   setup_tmp="$(mktemp)"
   profile_tmp="$(mktemp)"
   discovery_tmp="$(mktemp)"
+  decisions_tmp="$(mktemp)"
+  manifest_exists && had_manifest=true
+
   if [[ "${INTERACTIVE}" == "true" ]]; then
-    _interactive_setup_json > "${setup_tmp}"
-    _interactive_profile_json > "${profile_tmp}"
+    discovery_scan_project_json > "${discovery_tmp}"
+    _resolve_setup_decisions_json "$(cat "${discovery_tmp}")" > "${decisions_tmp}"
+    _apply_discovery_decisions_json "$(cat "${discovery_tmp}")" "$(cat "${decisions_tmp}")" > "${discovery_tmp}.decided"
+    mv "${discovery_tmp}.decided" "${discovery_tmp}"
+    if [[ "${had_manifest}" == "true" ]]; then
+      _interactive_setup_json > "${setup_tmp}"
+      _interactive_profile_json > "${profile_tmp}"
+    else
+      _generate_setup_json_from_discovery "$(cat "${discovery_tmp}")" > "${setup_tmp}"
+      _generate_profile_json "${PROFILE}" > "${profile_tmp}"
+    fi
   else
     discovery_scan_project_json > "${discovery_tmp}"
+    _resolve_setup_decisions_json "$(cat "${discovery_tmp}")" > "${decisions_tmp}"
+    _apply_discovery_decisions_json "$(cat "${discovery_tmp}")" "$(cat "${decisions_tmp}")" > "${discovery_tmp}.decided"
+    mv "${discovery_tmp}.decided" "${discovery_tmp}"
     _generate_setup_json_from_discovery "$(cat "${discovery_tmp}")" > "${setup_tmp}"
     _generate_profile_json "${PROFILE}" > "${profile_tmp}"
   fi
@@ -757,20 +1295,27 @@ _apply_generated() {
   _backup_file "${OPS_MANIFEST}"
   mkdir -p "${OPS_PROJECT_STATE_DIR}" "${OPS_PROFILES_DIR}" "${OPS_PROJECT_GENERATED_DIR}" "${OPS_PROJECT_CONFIG_DIR}" "${OPS_PROJECT_LOG_DIR}" "${OPS_PROJECT_RUN_DIR}"
   if [[ -s "${discovery_tmp}" ]]; then
-    discovery_file="$(discovery_write_project_json)"
-    _materialize_project_config_from_discovery "$(cat "${discovery_tmp}")" "$(cat "${setup_tmp}")" "$(cat "${profile_tmp}")"
+    printf '%s\n' "$(cat "${discovery_tmp}")" > "${OPS_DISCOVERY_FILE}"
+    discovery_file="${OPS_DISCOVERY_FILE}"
+    _materialize_project_config_from_discovery "$(cat "${discovery_tmp}")" "$(cat "${setup_tmp}")" "$(cat "${profile_tmp}")" "$(cat "${decisions_tmp}")"
     ops_ok "Wrote ${discovery_file#${OPS_PROJECT_ROOT}/}"
   fi
-  yq e -i ".setup = load(\"${setup_tmp}\") | .profiles.${PROFILE} = load(\"${profile_tmp}\")" "${OPS_MANIFEST}"
-  yq e -P -i '.' "${OPS_MANIFEST}"
-  yq e -o=json -I=2 ".setup" "${OPS_MANIFEST}" > "${OPS_PROJECT_GENERATED_DIR}/setup.json"
-  yq e -o=json -I=2 ".profiles.${PROFILE}" "${OPS_MANIFEST}" > "$(setup_profile_file "${PROFILE}")"
+  if [[ "${had_manifest}" == "true" ]]; then
+    yq e -i ".setup = load(\"${setup_tmp}\") | .profiles.${PROFILE} = load(\"${profile_tmp}\")" "${OPS_MANIFEST}"
+    yq e -P -i '.' "${OPS_MANIFEST}"
+    yq e -o=json -I=2 ".setup" "${OPS_MANIFEST}" > "${OPS_PROJECT_GENERATED_DIR}/setup.json"
+    yq e -o=json -I=2 ".profiles.${PROFILE}" "${OPS_MANIFEST}" > "$(setup_profile_file "${PROFILE}")"
+    ops_ok "Updated .ops.yaml setup section"
+    ops_ok "Updated .ops.yaml profiles.${PROFILE} section"
+  else
+    _write_manifest_from_discovery "$(cat "${discovery_tmp}")" "$(cat "${setup_tmp}")" "$(cat "${profile_tmp}")" "$(cat "${decisions_tmp}")"
+    cp "${setup_tmp}" "${OPS_PROJECT_GENERATED_DIR}/setup.json"
+    cp "${profile_tmp}" "$(setup_profile_file "${PROFILE}")"
+  fi
   rm -f "${OPS_PROJECT_GENERATED_DIR}/setup.yaml" "${OPS_PROFILES_DIR}/${PROFILE}.yaml" >/dev/null 2>&1 || true
   _materialize_project_structure_reference
   _materialize_project_values_metadata
-  rm -f "${setup_tmp}" "${profile_tmp}" "${discovery_tmp}"
-  ops_ok "Updated .ops.yaml setup section"
-  ops_ok "Updated .ops.yaml profiles.${PROFILE} section"
+  rm -f "${setup_tmp}" "${profile_tmp}" "${discovery_tmp}" "${decisions_tmp}" "${discovery_tmp}.decided"
   ops_ok "Materialized .ops.project/generated/setup.json and .ops.project/profiles/${PROFILE}.json"
 }
 
@@ -828,6 +1373,12 @@ case "${SUBCMD}" in
   discover)
     _run_discovery
     ;;
+  apply-services)
+    _run_apply_services
+    ;;
+  dependencies)
+    _run_dependencies
+    ;;
   show)
     require_manifest
     _show_setup
@@ -839,32 +1390,28 @@ case "${SUBCMD}" in
   generate)
     ops_section "ops setup"
     if ! manifest_exists; then
-      ops_warn ".ops.yaml not found. Running discovery-only setup preview."
+      ops_warn ".ops.yaml not found. Running discovery-driven setup."
       discovery_json="$(discovery_scan_project_json)"
+      decisions_json="$(_resolve_setup_decisions_json "${discovery_json}")"
+      discovery_json="$(_apply_discovery_decisions_json "${discovery_json}" "${decisions_json}")"
       _print_discovery_preview "${discovery_json}"
+      _print_dependency_decisions_preview "${decisions_json}"
       _print_discovery_config_proposal "${discovery_json}"
       if [[ "${APPLY}" == "true" ]]; then
-        ops_info "Manifest/config generation from discovery is not implemented in this batch yet."
+        _apply_generated
+      else
+        ops_info "Preview only. Use --apply to create .ops.project/config and transitional .ops.yaml."
       fi
       exit 0
     fi
     if [[ "${DRY_RUN}" == "true" || "${APPLY}" == "false" ]]; then
       discovery_json="$(discovery_scan_project_json)"
+      decisions_json="$(_resolve_setup_decisions_json "${discovery_json}")"
+      discovery_json="$(_apply_discovery_decisions_json "${discovery_json}" "${decisions_json}")"
       _print_discovery_preview "${discovery_json}"
+      _print_dependency_decisions_preview "${decisions_json}"
       _print_discovery_config_proposal "${discovery_json}"
-      ops_info "Preview legacy root .ops.yaml setup/profile sections for '${PROFILE}'. Use --apply to write."
-      printf '\nLegacy .ops.yaml setup preview:\n'
-      if [[ "${INTERACTIVE}" == "true" ]]; then
-        _interactive_setup_json | yq e -P -
-      else
-        _generate_setup_json | yq e -P -
-      fi
-      printf '\n.ops.yaml profiles.%s:\n' "${PROFILE}"
-      if [[ "${INTERACTIVE}" == "true" ]]; then
-        _interactive_profile_json | yq e -P -
-      else
-        _generate_profile_json "${PROFILE}" | yq e -P -
-      fi
+      ops_info "Preview only. Use --apply to write discovery-backed setup/config."
     else
       _apply_generated
     fi

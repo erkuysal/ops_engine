@@ -79,7 +79,11 @@ repo_root() {
 
 # Return the absolute path to .ops/core/
 ops_core_root() {
-  printf '%s/.ops/core' "$(repo_root)"
+  if [[ -n "${OPS_CORE_ROOT:-}" ]]; then
+    printf '%s' "${OPS_CORE_ROOT}"
+  else
+    printf '%s/.ops/core' "$(repo_root)"
+  fi
 }
 
 # Return the absolute path to .ops.yaml
@@ -100,7 +104,7 @@ _ops_bootstrap_root() {
     OPS_PROJECT_ROOT="$(repo_root)"
     export OPS_PROJECT_ROOT
   fi
-  OPS_CORE_ROOT="${OPS_PROJECT_ROOT}/.ops/core"
+  OPS_CORE_ROOT="${OPS_CORE_ROOT:-${OPS_PROJECT_ROOT}/.ops/core}"
   OPS_LOCAL_DIR="${OPS_PROJECT_ROOT}/.ops"
   OPS_MANIFEST="${OPS_PROJECT_ROOT}/.ops.yaml"
   export OPS_CORE_ROOT OPS_LOCAL_DIR OPS_MANIFEST

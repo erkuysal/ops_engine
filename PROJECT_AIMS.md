@@ -33,6 +33,8 @@ It should eventually:
 
 - install the `ops` command into a user/system bin directory such as `~/.local/bin`, `/usr/local/bin`, or another configured location
 - install or update the ops package into a stable user-level location such as `~/.local/share/ops` or `~/.ops`
+- record package metadata such as package format, ops core version, source checkout, source revision, install time, and update time
+- provide an explicit `ops install update` command that refreshes the installed package from the current ops checkout
 - verify required tools and shell compatibility
 - repair the global installation when requested
 - avoid creating project-specific state unless explicitly asked
@@ -59,6 +61,7 @@ It should:
 - infer env files and env policy
 - infer ports and health checks when possible
 - infer service dependencies when possible
+- interview and preserve confirmed `depends_on` relationships
 - create project config/state under `.ops.project`
 - export or maintain `.ops.yaml` only as a compatibility/human-editable layer while needed
 - enter an interactive flow when required values are ambiguous or missing
@@ -314,13 +317,15 @@ Choose:
 
 Confirmed answers should be stored in `.ops.project/config`, so future setup runs do not repeatedly ask.
 
+Dependency interviews should follow the same rule: preserve existing `depends_on` values, ask only in interactive setup flows, store confirmed answers in `.ops.project/config/decisions.json`, and materialize the resulting graph into `.ops.project/config/services.json`.
+
 ## Current Gaps
 
 The current implementation does some useful detection, but it is too shallow.
 
 Known gaps:
 
-- `install` is currently repo-local, not a true global installer
+- `install` has a first-pass global Bash launcher and stable user-level package copy
 - `setup` currently depends on an existing `.ops.yaml`
 - `bootstrap`, `init`, and `update` split responsibilities that should move into setup
 - detection only emits `id`, `path`, `stack`, and `score`
@@ -396,7 +401,8 @@ Docker:
 ### Phase 6: Global Install
 
 - Convert `ops install` into a real global installer
-- Support install, update, repair, and doctor
+- Support install, repair, uninstall, and doctor
+- Support package version markers and explicit package updates
 - Ensure `ops setup` works in any repository after install
 
 ## Success Criteria

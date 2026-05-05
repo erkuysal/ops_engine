@@ -11,6 +11,7 @@ source "${_SELF_DIR}/../lib/settings.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
 source "${_SELF_DIR}/../lib/env.sh"
 source "${_SELF_DIR}/../lib/cross_shell.sh"
+source "${_SELF_DIR}/../lib/run_plan.sh"
 
 _usage_show() {
   cat <<'EOF'
@@ -70,6 +71,9 @@ if ! manifest_list_services | grep -qFx "${SVC_ID}"; then
   die "Unknown service: '${SVC_ID}'" 2
 fi
 
+RUN_PLAN_JSON="$(run_plan_generate_json "${ACTION}" "${SVC_ID}")"
+RUN_PLAN_FILE="$(run_plan_write_json "${SVC_ID}" "${ACTION}" "${RUN_PLAN_JSON}")"
+
 SVC_NAME="$(manifest_get_service_field "${SVC_ID}" name)"
 SVC_PATH="$(manifest_get_service_field "${SVC_ID}" path)"
 STACK="$(manifest_get_service_field "${SVC_ID}" stack)"
@@ -104,33 +108,11 @@ _bool_exec() {
 
 _stack_default_command() {
   local stack="$1" action="$2"
-  case "${stack}:${action}" in
-    django:start) printf 'python -u manage.py runserver 0.0.0.0:8000' ;;
-    django:test) printf 'python manage.py test' ;;
-    django:stop|node:stop|go:stop|elixir-phoenix:stop|custom:stop) printf 'stop pid from .ops.project/run/${OPS_SERVICE_ID}.pid' ;;
-    django:status|node:status|go:status|elixir-phoenix:status|custom:status) printf 'check pid from .ops.project/run/${OPS_SERVICE_ID}.pid' ;;
-    node:start) printf 'npm start' ;;
-    node:build) printf 'npm run build' ;;
-    node:test) printf 'npm test' ;;
-    node:lint) printf 'npm run lint' ;;
-    go:start) printf 'go run main.go' ;;
-    go:build) printf 'go build -o app' ;;
-    go:test) printf 'go test ./...' ;;
-    elixir-phoenix:start) printf 'mix phx.server' ;;
-    elixir-phoenix:test) printf 'mix test' ;;
-    elixir-phoenix:build) printf 'mix release' ;;
-    docker:start) printf 'docker compose up -d' ;;
-    docker:stop) printf 'docker compose down' ;;
-    docker:logs) printf 'docker compose logs -f' ;;
-    docker:status) printf 'docker compose ps --services --filter status=running' ;;
-    *) return 1 ;;
-  esac
+  run_plan_stack_default_command "${stack}" "${action}"
 }
 
 _legacy_target_script() {
-  local registry="${OPS_PROJECT_ROOT}/scripts/commands.sh"
-  [[ -f "${registry}" ]] || return 1
-  bash -c "source '${registry}' >/dev/null 2>&1 && printf '%s' \"\${COMMAND_SCRIPTS[${ACTION}]:-}\""
+  run_plan_legacy_target_script "${ACTION}"
 }
 
 _print_python_env_plan() {
@@ -254,6 +236,7 @@ else
 fi
 printf '  state dir: %s\n' "${OPS_PROJECT_STATE_DIR}"
 printf '  setup profile: %s\n' "${SETUP_PROFILE}"
+printf '  run plan: %s\n' "${RUN_PLAN_FILE#${OPS_PROJECT_ROOT}/}"
 
 printf '\nResolution\n'
 if [[ "${RUNNER_KIND}" == "process_group" ]]; then

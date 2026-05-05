@@ -17,6 +17,7 @@ source "${_SELF_DIR}/../lib/logger.sh"
 source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/settings.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
+source "${_SELF_DIR}/../lib/run_plan.sh"
 source "${_SELF_DIR}/../lib/env.sh"
 source "${_SELF_DIR}/../lib/env_materialize.sh"
 source "${_SELF_DIR}/../lib/preflight.sh"
@@ -67,12 +68,20 @@ if ! manifest_list_services | grep -qFx "${SVC_ID}"; then
   exit 2
 fi
 
-SVC_PATH="$(manifest_get_service_field "${SVC_ID}" path)"
+RUN_PLAN_JSON="$(run_plan_generate_json "${ACTION}" "${SVC_ID}" "${MODE}")"
+RUN_PLAN_FILE="$(run_plan_write_json "${SVC_ID}" "${ACTION}" "${RUN_PLAN_JSON}")"
+
+_run_plan_get() {
+  local expr="${1:?_run_plan_get: jq expression required}"
+  jq -r "${expr} // \"\"" <<<"${RUN_PLAN_JSON}"
+}
+
+SVC_PATH="$(_run_plan_get '.service.path')"
 if [[ -z "${SVC_PATH}" || "${SVC_PATH}" == "null" ]]; then
   ops_error "Service '${SVC_ID}' has no 'path' defined."
   exit 2
 fi
-ABS_PATH="${OPS_PROJECT_ROOT}/${SVC_PATH}"
+ABS_PATH="$(_run_plan_get '.service.abs_path')"
 
 export OPS_SERVICE_ID="${SVC_ID}"
 export OPS_ACTION="${ACTION}"
@@ -81,12 +90,12 @@ if [[ ! -d "${ABS_PATH}" ]]; then
   exit 3
 fi
 
-STACK="$(manifest_get_service_field "${SVC_ID}" stack)"
+STACK="$(_run_plan_get '.service.stack')"
 if [[ -z "${STACK}" || "${STACK}" == "null" ]]; then
   ops_error "Service '${SVC_ID}' has no 'stack' defined."
   exit 2
 fi
-RUNNER_KIND="$(manifest_get_service_field "${SVC_ID}" "runner.kind")"
+RUNNER_KIND="$(_run_plan_get '.service.runner_kind')"
 
 AUTO_CONDA_ENV=""
 if [[ "${ACTION}" == "start" && "${STACK}" == "django" && -z "${OPS_CONDA_ENV:-}" ]]; then
@@ -98,11 +107,11 @@ export OPS_SVC_PATH="${ABS_PATH}"
 export OPS_RUN_MODE="${MODE}"
 
 # We allow any arbitrary action, but we can look up the explicit string in manifest
-EXPLICIT_CMD="$(manifest_get_service_field "${SVC_ID}" "actions.${ACTION}")"
-SETUP_CMD=""
-if [[ "${ACTION}" == "start" ]]; then
-  SETUP_CMD="$(setup_service_start_command "${SVC_ID}")"
-fi
+EXPLICIT_CMD="$(_run_plan_get '.service.explicit_command')"
+SETUP_CMD="$(_run_plan_get '.setup.command')"
+SELECTED_STRATEGY="$(_run_plan_get '.resolution.selected.strategy')"
+SELECTED_COMMAND="$(_run_plan_get '.resolution.selected.command')"
+SELECTED_CWD="$(_run_plan_get '.resolution.selected.cwd')"
 
 # ── Preflight Checks ─────────────────────────────────────────────────────────
 preflight_check_stack "${STACK}"
@@ -119,6 +128,7 @@ trap '_cleanup' EXIT INT TERM
 
 # Export OPS_LOG_SERVICE for log multiplexing
 export OPS_LOG_SERVICE="${SVC_ID}"
+ops_info "Run plan: ${RUN_PLAN_FILE#${OPS_PROJECT_ROOT}/}"
 
 # ── Resolve Strategy & Execute ───────────────────────────────────────────────
 # Command resolution:
@@ -297,9 +307,172 @@ _run_isolated() {
   fi
 }
 
+_shell_quote() {
+  printf '%q' "$1"
+}
+
+_exit_from_run_code() {
+  local code="${1:-0}"
+
+  if [[ ${code} -ne 0 ]]; then
+    if [[ ${code} -eq 2 || ${code} -eq 3 || ${code} -eq 6 || ${code} -eq 7 ]]; then
+      exit "${code}"
+    fi
+    exit 5
+  fi
+
+  exit 0
+}
+
+_run_selected_isolated() {
+  local label="$1"
+  local cmd="$2"
+  local cwd="${3:-${ABS_PATH}}"
+  local code=0
+
+  ops_info "${label}"
+  _run_isolated "cd $(_shell_quote "${cwd}") && ${cmd}"
+  code=$?
+  _exit_from_run_code "${code}"
+}
+
+_run_selected_script() {
+  local label="$1"
+  local script_path="$2"
+  local cwd="${3:-${ABS_PATH}}"
+  local code=0
+
+  ops_info "${label}"
+  _run_isolated "cd $(_shell_quote "${cwd}") && $(_shell_quote "${script_path}")"
+  code=$?
+  _exit_from_run_code "${code}"
+}
+
+_run_selected_legacy_bridge() {
+  local target_script="$1"
+  local code=0
+
+  if [[ -z "${target_script}" || "${target_script}" == "null" ]]; then
+    ops_error "Run plan selected legacy bridge, but no target script was resolved."
+    exit 2
+  fi
+
+  local bridge_args=()
+  case "${ACTION}" in
+    build|deploy|staging|release|update|publish|hotswap)
+      bridge_args+=("--services" "${SVC_ID}")
+      ;;
+    *)
+      bridge_args+=("${SVC_ID}")
+      ;;
+  esac
+
+  local args_cmd=""
+  local arg
+  for arg in "${bridge_args[@]}"; do
+    args_cmd+=" $(_shell_quote "${arg}")"
+  done
+
+  ops_info "Running selected legacy bridge: scripts/${target_script}"
+  _run_isolated "cd $(_shell_quote "${OPS_PROJECT_ROOT}") && bash $(_shell_quote "${OPS_PROJECT_ROOT}/scripts/${target_script}")${args_cmd}"
+  code=$?
+  _exit_from_run_code "${code}"
+}
+
+_run_selected_stack() {
+  local code=0
+  local stack_file stack_dispatch_func legacy_target
+
+  stack_file="$(_run_plan_get '.resolution.candidates.stack_dispatcher.path')"
+  stack_dispatch_func="$(_run_plan_get '.resolution.candidates.stack_dispatcher.function')"
+  legacy_target="$(_run_plan_get '.resolution.candidates.legacy_bridge')"
+
+  if [[ ! -f "${stack_file}" ]]; then
+    ops_error "Stack strategy not found: ${stack_file}"
+    exit 2
+  fi
+
+  SUBSHELL_CMD=$(cat <<EOF
+  cd $(_shell_quote "${ABS_PATH}") || exit 3
+  source $(_shell_quote "${stack_file}")
+
+  if type '${stack_dispatch_func}' >/dev/null 2>&1; then
+    '${stack_dispatch_func}' '${ACTION}' '${EXPLICIT_CMD}'
+    CODE=\$?
+    if [[ \$CODE -eq 10 ]]; then
+      if [[ -n '${EXPLICIT_CMD}' && '${EXPLICIT_CMD}' != 'null' ]]; then
+        eval '${EXPLICIT_CMD}'
+        CODE=\$?
+      else
+        TARGET_SCRIPT='${legacy_target}'
+        if [[ -n "\${TARGET_SCRIPT}" && "\${TARGET_SCRIPT}" != "null" ]]; then
+          echo "[INFO] Bridging to legacy script: scripts/\${TARGET_SCRIPT}" >&2
+
+          BRIDGE_ARGS=()
+          case "${ACTION}" in
+            build|deploy|staging|release|update|publish|hotswap)
+              BRIDGE_ARGS+=("--services" "${SVC_ID}")
+              ;;
+            *)
+              BRIDGE_ARGS+=("${SVC_ID}")
+              ;;
+          esac
+
+          cd "${OPS_PROJECT_ROOT}" || exit 3
+          bash "${OPS_PROJECT_ROOT}/scripts/\${TARGET_SCRIPT}" "\${BRIDGE_ARGS[@]}"
+          CODE=\$?
+          exit \$CODE
+        fi
+
+        echo "[ERROR] Action '${ACTION}' is neither implemented by stack '${STACK}', explicitly defined in manifest, nor bridged in scripts/commands.sh" >&2
+        exit 2
+      fi
+    fi
+    exit \$CODE
+  else
+    echo "[ERROR] Stack file '${stack_file}' missing dispatch function '${stack_dispatch_func}'" >&2
+    exit 2
+  fi
+EOF
+)
+
+  _run_isolated "${SUBSHELL_CMD}"
+  code=$?
+  _exit_from_run_code "${code}"
+}
+
+case "${SELECTED_STRATEGY}" in
+  service_override)
+    _run_selected_script "Running selected service override: ${SELECTED_COMMAND#${OPS_PROJECT_ROOT}/}" "${SELECTED_COMMAND}" "${SELECTED_CWD}"
+    ;;
+  global_override)
+    _run_selected_script "Running selected global override: ${SELECTED_COMMAND#${OPS_PROJECT_ROOT}/}" "${SELECTED_COMMAND}" "${SELECTED_CWD}"
+    ;;
+  setup_command)
+    _run_selected_isolated "Running selected setup command for ${SVC_ID}" "${SELECTED_COMMAND}" "${SELECTED_CWD}"
+    ;;
+  stack|manifest_action|stack_default)
+    ops_info "Running selected stack strategy: ${SELECTED_STRATEGY}"
+    _run_selected_stack
+    ;;
+  legacy_bridge)
+    _run_selected_legacy_bridge "$(_run_plan_get '.resolution.candidates.legacy_bridge')"
+    ;;
+  unresolved|"")
+    ops_error "No runner resolved for action '${ACTION}' on service '${SVC_ID}'."
+    exit 2
+    ;;
+  *)
+    ops_error "Unknown run-plan strategy '${SELECTED_STRATEGY}' for action '${ACTION}' on service '${SVC_ID}'."
+    exit 2
+    ;;
+esac
+
+exit 0
+
 SVC_OVERRIDE="${OPS_PROJECT_ROOT}/.ops/commands/${SVC_ID}/${ACTION}.sh"
 GLOBAL_OVERRIDE="${OPS_PROJECT_ROOT}/.ops/commands/${ACTION}.sh"
-STACK_FILE="${_SELF_DIR}/../stacks/${STACK}.sh"
+STACK_FILE="${OPS_CORE_ROOT}/stacks/${STACK}.sh"
 
 # Resolution order for action execution:
 # 1. Local override: .ops/commands/<service>/<action>.sh (highest priority — user customization)

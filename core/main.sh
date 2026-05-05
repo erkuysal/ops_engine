@@ -13,7 +13,7 @@
 #   bootstrap — One-shot .ops.yaml generator from project metadata (LIVE)
 #   validate  — Four-pass manifest validator (LIVE)
 #   env       — Environment broker: show/doctor subcommands (LIVE)
-#   install   — Install/repair repo-local ops files (LIVE)
+#   install   — Install/doctor/repair/uninstall global ops command (LIVE)
 #   setup     — Project setup/profile generation (LIVE)
 #   init      — Interactive manifest wizard (Phase 2)
 #   run       — Single-service action runner (Phase 3)
@@ -44,6 +44,7 @@ source "${_MAIN_DIR}/lib/logger.sh"
 
 # ── Version ──────────────────────────────────────────────────────────────────
 OPS_CORE_VERSION="0.11.0-phase9"
+OPS_PACKAGE_MARKER="${_MAIN_DIR}/../../.ops-install-source"
 
 # ── Help ─────────────────────────────────────────────────────────────────────
 _usage() {
@@ -57,7 +58,7 @@ Commands:
   doctor    Check orchestrator prerequisites  [live]
   bootstrap Seed .ops.yaml from probe-based workspace discovery [live]
   validate  Manifest validator                [live]
-  install   Install/repair ops files          [live]
+  install   Install/doctor/repair global ops command [live]
   setup     Project setup/profile config      [live]
   init      Interactive manifest wizard       [Phase 2]
   run       Single-service action runner      [Phase 3]
@@ -91,7 +92,7 @@ ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_BOLD}doctor${OPS_NC}    Check orchestrator prerequisites     ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}bootstrap${OPS_NC} Seed .ops.yaml from probe-based discovery ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}validate${OPS_NC}  Manifest validator                   ${OPS_GREEN}[live]${OPS_NC}
-  ${OPS_BOLD}install${OPS_NC}   Install/repair ops files             ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}install${OPS_NC}   Install/doctor/repair global command ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}setup${OPS_NC}     Project setup/profile config         ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_DIM}init      Interactive manifest wizard          [Phase 2]${OPS_NC}
   ${OPS_DIM}run       Single-service action runner         [Phase 3]${OPS_NC}
@@ -134,6 +135,9 @@ case "${COMMAND}" in
 
   version|--version|-v)
     printf 'ops-core %s\n' "${OPS_CORE_VERSION}"
+    if [[ -f "${OPS_PACKAGE_MARKER}" ]]; then
+      sed -n 's/^ops-core-version=/installed-package-version /p; s/^source-revision=/installed-source-revision /p; s/^updated-at=/installed-updated-at /p' "${OPS_PACKAGE_MARKER}" 2>/dev/null
+    fi
     exit 0
     ;;
 
