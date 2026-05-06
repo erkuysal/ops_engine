@@ -1,341 +1,326 @@
-# Ops Package
+# Ops
 
-**Ops** is a reusable, framework-agnostic **development orchestration system** for multi-service projects. It provides:
+Ops is a reusable, project-independent orchestration package for multi-service
+repositories.
 
-- 🎯 **Unified command interface** for starting, stopping, and managing services
-- 🏗️ **Stack-based dispatch** with auto-detection of Go, Python, Node.js, Elixir, and other runtimes
-- 🔧 **Service manifests** (`.ops.yaml`) for declaring projects, runtimes, ports, env files, and profiles
-- 📊 **Real-time log streaming** with stdbuf integration for immediate feedback
-- 🌍 **Multi-environment support** (local, staging, production, remote/VPS)
-- 🔄 **Extensible architecture** with local/global command overrides and probe-based discovery
+The direction is simple:
 
-`.ops/` contains package code, stack strategies, schemas, templates, and documentation only. Active project-specific values belong in `.ops.yaml` and `.ops.project/`.
+- `.ops/` is the package
+- `.ops.project/` is the project memory and generated runtime state
+- `ops install` installs the universal command once per machine
+- `ops setup` initializes or refreshes each project
+- runtime commands consume discovered/configured project state instead of
+  hard-coded project scripts
 
-Discovery inside `.ops/` is probe-based: small stack probe scripts live under `.ops/core/probes/` and are loaded by the engine when scanning the workspace.
+Ops is being migrated away from project-specific shell scripts and toward a
+generic discovery, setup, run-plan, and execution model.
 
 ## Current State
 
-**Phase:** Core functionality implemented. Stable for multi-service orchestration with real-time log streaming.
+Ops currently supports:
 
-**What works:**
-- ✅ Multi-stack service orchestration (Django, Phoenix, Go, Node.js)
-- ✅ Real-time foreground/background execution with log streaming
-- ✅ Cross-shell binary support (Windows binaries accessible from WSL)
-- ✅ Service manifests and stack-based dispatch
-- ✅ Local/global command overrides
-- ✅ Profile-based environment management (local/staging/production)
-- ✅ Probe-based runtime auto-detection
+- global `ops` launcher install, doctor, repair, update, and uninstall
+- installed package version markers and `ops install update`
+- project setup discovery with `.ops.project` materialization
+- guided `ops setup` flow when run in an interactive terminal
+- modular setup commands for project base, services, dependencies, and CI
+- discovery-backed service config for Django, Go, Node, and Phoenix-style apps
+- process-group support for Go services with multiple `cmd/*` binaries
+- config-first runtime reads from `.ops.project/config`, with `.ops.yaml`
+  fallback during migration
+- real-time foreground log streaming for service starts
+- background service logs and PID files under `.ops.project`
+- run-plan inspection before execution
+- dependency preview/interview and storage in project config
+- local-first CI/server metadata and secrets setup
+- optional GitHub Actions secret guidance
+- WSL/Windows binary path support for cross-OS execution
 
-**Known limitations:**
-- Docker Compose integration is manual (compose files must be configured in profiles)
-- No built-in service dependency orchestration (must configure manually in `.ops.yaml`)
-- Windows binary path translation requires explicit stack handler enhancement (see [Cross-Platform issue](ISSUES/1_CROSS_PLATFORM.md))
-
-## Upcoming Features
-
-### Docker Integration (Phase 2)
-- ✨ Auto-probe Docker Compose files under `docker-compose.*.yml`
-- ✨ Service discovery from docker-compose.yml stack definitions
-- ✨ One-command Docker network and volume setup
-- ✨ Health check verification via Docker container inspect
-
-### Service Dependency Resolution (Phase 2)
-- ✨ Automatic dependency ordering (start dependencies before service)
-- ✨ Health check assertions before marking service as ready
-- ✨ Parallel service startup with proper sequencing
-
-### Enhanced Cross-Platform Support (Phase 2)
-- ✨ Stack-level Windows binary handling (see [1_CROSS_PLATFORM.md](ISSUES/1_CROSS_PLATFORM.md))
-- ✨ ARM/x86 cross-compilation detection
-- ✨ WSL/Windows path translation transparency
-
-### CI/CD Templating (Phase 3)
-- ✨ GitHub Actions/GitLab CI/Jenkins workflow generators
-- ✨ Environment variable materialization for CI contexts
-- ✨ Automated testing and linting hooks
-
-### Remote/VPS Deployment (Phase 3)
-- ✨ SSH-based remote service management
-- ✨ Remote log tailing and monitoring
-- ✨ Certificate and secrets management
-
-## Dependencies
-
-### Required
-- **bash** ≥ 4.0 — Core orchestration language
-- **jq** — YAML/JSON manifest parsing
-- **wslpath** (WSL only) — Path translation for cross-platform execution
-
-### Optional (Stack-Specific)
-| Stack | Required | Optional |
-|-------|----------|----------|
-| **go** | `go` binary (WSL or Windows) | — |
-| **python** | `python`/`conda` | `pip`, `poetry` |
-| **node** | `node`, `npm` | `yarn`, `pnpm` |
-| **elixir** | `elixir`, `mix` | — |
-| **django** | `python`, `manage.py` | `poetry`, `pip` |
-| **docker** | `docker`, `docker-compose` | — |
-| **postgres** | — | `psql` (for health checks) |
-| **redis** | — | `redis-cli` (for health checks) |
-
-### Environment
-- **Linux/macOS**: Works natively
-- **WSL2 (Windows)**: Fully supported with Windows binary detection
-- **Docker**: Works inside containers with proper volume mounting
-- **CI/CD**: GitHub Actions, GitLab CI, Jenkins compatible
+The system is usable, but still evolving. `.ops.yaml` is still present as a
+compatibility and human-editable layer. The long-term target is to move more
+confirmed project facts into `.ops.project/config`.
 
 ## Boundaries
 
 | Path | Owner | Purpose |
 | --- | --- | --- |
-| `.ops/` | ops package | Commands, libraries, stack strategies, schemas, templates, docs |
-| `.ops.yaml` | project | Services, settings, setup, profiles, runtimes, ports, remotes |
-| `.ops.project/` | generated project state | Logs, PID files, generated materializations, backups |
-| `ops.sh` | package entrypoint | Stable command entrypoint into `.ops/core/main.sh` |
+| `.ops/` | ops package | Commands, libraries, stack strategies, probes, schemas, docs |
+| `.ops.project/` | project-local generated state | Config, discovery cache, run plans, logs, PID files, backups, secrets |
+| `.ops.yaml` | migration/project layer | Transitional manifest, service declarations, settings, setup, profiles |
+| `ops.sh` | repo entrypoint | Runs the local `.ops` package from this repository |
 
-Do not put active project values in `.ops/settings.json`, `.ops/setup.json`, or `.ops/profiles/*.json`. Those files may exist from older iterations, but current code reads active values from `.ops.yaml`.
+Do not put project-specific values into package files under `.ops/`.
 
-## Current Config Source
+## Install Vs Setup
 
-The root `.ops.yaml` is the source of truth. It contains:
-
-- `project`: project name and global env files
-- `services`: service manifest and stack mapping
-- `settings`: ops behavior defaults
-- `setup`: project runtime facts
-- `profiles`: environment-specific local/staging/production/remote values
-- `ci`: CI policy
-- `overrides`: reserved override metadata
-
-Example shape:
-
-```yaml
-settings:
-  run:
-    default_mode: foreground
-  start:
-    mode: foreground
-    with_deps: true
-    preview:
-      enabled: true
-      lines: 20
-      wait_seconds: 1
-
-setup:
-  default_profile: ""
-  scaffold:
-    type: ""
-    package_manager: ""
-    template: ""
-  runtimes:
-    python:
-      manager: ""
-      env: ""
-      fallbacks: []
-  services:
-    backend:
-      runtime: ""
-      port: 0
-      command: ""
-      env_files: []
-
-profiles:
-  local:
-    docker:
-      network: ""
-      compose_files: []
-    healthchecks: {}
-```
-
-## Generated State
-
-`.ops.project/` is created by `ops setup --apply` and used for generated state:
-
-```text
-.ops.project/
-  logs/
-  run/
-  generated/
-  profiles/
-  .history/
-```
-
-Runtime files:
-
-- Logs: `.ops.project/logs/<service>.log`
-- PID files: `.ops.project/run/<service>.pid`
-- Setup materializations: `.ops.project/generated/`
-- Backups: `.ops.project/.history/`
-
-## Commands
+`install` and `setup` are intentionally separate.
 
 ### Install
 
-Install or repair the local ops package/state boundary:
+`ops install` is a one-time, system-level operation. It installs a universal
+Bash `ops` command so ops can be called from any repository.
 
 ```bash
 ./ops.sh install
-./ops.sh install --repair
-./ops.sh install --dry-run
 ./ops.sh install doctor
+./ops.sh install repair
+./ops.sh install update
+./ops.sh install uninstall
 ```
 
-`install` verifies package files under `.ops/` and command scaffolding. It does not create project runtime state.
+The installed launcher walks upward from the current directory looking for a
+project-local `.ops/core/main.sh`. If it finds one, it runs that project copy.
+Otherwise it runs the packaged ops core against the current directory.
+
+Install does not initialize a project.
 
 ### Setup
 
-Generate, apply, inspect, and validate project setup values in `.ops.yaml`:
+`ops setup` is the project initializer.
+
+Bare `ops setup` starts a guided setup sequence when run in a terminal, similar
+to modern JavaScript framework initializers. In non-interactive shells it keeps
+preview behavior so scripts and CI do not hang.
 
 ```bash
-./ops.sh setup --profile=local --dry-run
-./ops.sh setup --profile=local --apply
-./ops.sh setup init --profile=local --apply
-./ops.sh setup --interactive --profile=local --apply
-./ops.sh setup show --profile=local
-./ops.sh setup doctor --profile=local
-./ops.sh setup doctor --profile=production
+ops setup
+ops setup --dry-run
+ops setup --interactive --apply
+ops setup all --apply
 ```
 
-`setup --apply` writes empty/project-neutral setup scaffolding by default. `setup init` and `setup --interactive` prompt for scaffold type, package manager, runtime, service commands, ports, env files, remote/VPS values, Docker values, certificates, and healthchecks before writing `.ops.yaml`.
+Setup can also run individual modules:
 
-`setup --apply` updates `.ops.yaml`, creates `.ops.project/` if needed, materializes derived files there, and refreshes `scripts/project_structure.json` plus `project_metadata` in `scripts/project_values.json` from the manifest.
+```bash
+ops setup project --apply
+ops setup services --apply
+ops setup dependencies --interactive --apply
+ops setup ci --interactive --apply
+```
+
+Module roles:
+
+- `project`: creates the base `.ops.project` structure
+- `services`: discovers service candidates and applies runtime service config
+- `dependencies`: previews or interviews service dependency decisions
+- `ci`: creates local CI/server config and local secrets template
+- `all`: full discovery/config/services/dependencies setup path
+
+`ops setup init` remains available for the older detailed setup/profile
+interview path.
+
+## Project Memory
+
+`.ops.project/` is the local project memory. It is generated or updated by
+setup and runtime commands.
+
+Current shape:
+
+```text
+.ops.project/
+  .gitignore
+  .history/
+  config/
+    project.json
+    services.json
+    settings.json
+    profiles.json
+    decisions.json
+    ci.json
+  generated/
+    discovery.json
+    setup.json
+    project_structure.json
+    project_values.json
+    run-plans/
+  logs/
+  profiles/
+  run/
+  secrets/
+    ci.env
+```
+
+Private/local state belongs here:
+
+- logs: `.ops.project/logs/`
+- PID files: `.ops.project/run/`
+- generated discovery and setup facts: `.ops.project/generated/`
+- local config memory: `.ops.project/config/`
+- local secrets/env values: `.ops.project/secrets/`
+- backups: `.ops.project/.history/`
+
+Secrets should not be committed. `.ops.project/.gitignore` ignores local
+secrets, logs, and run state.
+
+## Configuration Direction
+
+Current runtime reads prefer `.ops.project/config` and fall back to `.ops.yaml`
+where needed.
+
+The desired direction is:
+
+1. Discovery scans the workspace.
+2. Setup resolves uncertain values through defaults or interactive prompts.
+3. Confirmed decisions are stored in `.ops.project/config`.
+4. Runtime commands read project config and generated run plans.
+5. `.ops.yaml` becomes optional or a compatibility/export layer.
+
+This lets `.ops/` stay package-owned and reusable across projects.
+
+## Commands
 
 ### Validate
 
-Validate root config and related package expectations:
-
 ```bash
-./ops.sh validate --plain
+ops validate --plain
 ```
 
-Validation covers:
-
-- `.ops.yaml` syntax
-- required manifest sections
-- service IDs, stacks, env policy, dependencies
-- service paths and env files
-- local override scripts
-- `.ops.yaml` `settings`, `setup`, and `profiles`
-- probe-based workspace discovery (`.ops/core/probes/*.sh`)
-- existence of `.ops.project/`
+Validation checks manifest syntax, required sections, service IDs, stacks,
+dependencies, filesystem paths, env file references, overrides, settings,
+setup, and profiles.
 
 ### Doctor
 
-Check package and project health:
-
 ```bash
-./ops.sh doctor
+ops doctor
+ops install doctor
+ops setup doctor --profile=local
+ops ci doctor
 ```
 
-Doctor verifies the `.ops/` package files, `.ops.project/` state directory, root `.ops.yaml`, and required tools.
+Doctor commands check package health, installed launcher health, setup/profile
+health, local CI/server metadata, expected tools, SSH key paths, and workflow
+file references.
 
 ### Show
 
-Inspect the exact execution plan:
-
 ```bash
-./ops.sh show start backend
+ops show start userengine
 ```
 
-Output includes:
-
-- selected service and stack
-- active root config source
-- active profile
-- service command
-- service port
-- runtime
-- selected runner
-- env files
-- masked env context
-- log/PID paths under `.ops.project/`
+Show prints the execution plan before running it, including the config source,
+selected runner, stack dispatcher, command candidates, runtime paths, build
+outputs, process groups, env context, logs, and PID paths.
 
 ### Start, Stop, Logs
 
 ```bash
-./ops.sh start backend
-./ops.sh start backend --background
-./ops.sh start backend --foreground
-./ops.sh start backend --dry-run
-./ops.sh stop backend
-./ops.sh logs backend
-./ops.sh logs backend --follow
+ops start userengine
+ops start userengine --dry-run
+ops start userengine --background
+ops stop userengine
+ops logs userengine
+ops logs userengine --follow
 ```
 
-Foreground/background defaults are read from `.ops.yaml -> settings`.
+Foreground starts stream service output in real time. Background starts write
+logs and PID files under `.ops.project`.
 
-Background starts write logs/PIDs to `.ops.project/` and print a startup preview.
+### CI And Server Config
+
+CI support is local-first. GitHub Actions is optional.
+
+```bash
+ops ci setup --interactive --apply
+ops ci env --apply
+ops ci show
+ops ci doctor
+ops ci connect
+ops ci secrets
+ops ci ssh-key --apply
+```
+
+CI/server metadata is stored in:
+
+```text
+.ops.project/config/ci.json
+```
+
+Local secrets can live in:
+
+```text
+.ops.project/secrets/ci.env
+```
+
+This supports a workflow where deployment secrets stay in your own env/config,
+and ops connects to your server over SSH. GitHub Actions can still be used as a
+bridge, but it is not the foundation of the system.
 
 ## Action Resolution
 
-For `./ops.sh run <action> <service>`, resolution order is:
+For `ops run <action> <service>`, ops resolves behavior through:
 
-1. Service override: `.ops/commands/<service>/<action>.sh`
-2. Global override: `.ops/commands/<action>.sh`
-3. Setup command: `.ops.yaml -> setup.services.<service>.command` for `start`
-4. Stack strategy: `.ops/core/stacks/<stack>.sh`
-5. Explicit manifest action: `.ops.yaml -> services[].actions.<action>`
-6. Legacy bridge: `scripts/commands.sh`
+1. project config and generated run-plan state
+2. service-specific overrides under `.ops/commands/<service>/`
+3. global command overrides under `.ops/commands/`
+4. setup-derived service commands
+5. stack strategies under `.ops/core/stacks/`
+6. explicit manifest actions
+7. legacy bridge behavior where still needed
 
-Use `show` whenever behavior is unclear:
+Use `ops show <action> <service>` whenever behavior is unclear.
 
-```bash
-./ops.sh show start backend
-```
+## Cross-OS Direction
 
-## Profiles
+Ops is designed to work across Linux, macOS, WSL, and Windows-adjacent
+toolchains.
 
-Profiles live under `.ops.yaml -> profiles`.
+Current cross-OS work includes:
 
-Typical profiles:
+- WSL detection
+- Windows executable discovery from WSL
+- Windows path translation through `wslpath`
+- wrapper/shim support for binaries discovered across shells
+- Go build/run handling that can use project config and generated outputs
 
-- `local`
-- `staging`
-- `production`
-- `remote`
+The direction is to keep cross-shell behavior in generic ops libraries and
+stack strategies, not in project-specific command scripts.
 
-Remote/VPS profiles can define:
+## Legacy Compatibility
 
-- `remote.host`
-- `remote.user`
-- `remote.path`
-- `remote.ssh_key_path`
-- `docker.network`
-- `docker.compose_files`
-- `healthchecks`
-- `certificates`
-
-Secrets should not be stored in profiles. Store secrets in env files, CI secrets, server environment, or secret managers.
-
-## Package Templates And Schemas
-
-`.ops/templates/` and `.ops/schemas/` are package-owned. They are generic examples and validation aids, not active project config.
-
-Package templates must stay project-neutral. Project-specific materialized values belong in `.ops.yaml` and `.ops.project/`.
-
-## Migration Note
-
-Older local files may still exist:
-
-- `.ops/settings.json`
-- `.ops/setup.json`
-- `.ops/profiles/*.json`
-- `.ops/logs/`
-- `.ops/run/`
-
-They are deprecated as active config/state. Current code reads from `.ops.yaml` and writes runtime state to `.ops.project/`.
-
-Do not delete old files automatically unless explicitly requested. They can be removed or archived after verification.
-
-## Recommended Checks
+Legacy scripts can still be reached through:
 
 ```bash
-./ops.sh install doctor
-./ops.sh setup show --profile=local
-./ops.sh setup doctor --profile=local
-./ops.sh setup doctor --profile=production
-./ops.sh validate --plain
-./ops.sh show start backend
-./ops.sh start backend --dry-run
+./ops.sh legacy ...
 ```
 
+Compatibility wrappers also exist for older `bootstrap`, `init`, and `update`
+flows, but the preferred path is now:
+
+```bash
+ops setup
+ops show start <service>
+ops start <service>
+```
+
+## Useful Checks
+
+```bash
+ops install doctor
+ops setup --dry-run
+ops setup project
+ops setup services
+ops setup dependencies
+ops setup ci
+ops ci doctor
+ops validate --plain
+ops show start userengine
+ops start userengine --dry-run
+```
+
+## Roadmap
+
+Near-term direction:
+
+- make `.ops.project/config` the primary source for all project facts
+- reduce `.ops.yaml` to optional export/import or compatibility
+- improve the guided setup wizard with better module summaries
+- improve dependency graph interviews and persistence
+- expand CI/server setup around SSH deploy workflows
+- continue removing project-specific command assumptions
+- make workspace detection more portable and less dependent on guide files
+- strengthen cross-OS shell compatibility
+- improve installed package update ergonomics and release/version reporting
+
+The guiding principle: `.ops` should remain reusable package code. Project
+facts should be discovered, confirmed, and stored outside the package.

@@ -15,17 +15,31 @@ PROFILE=""
 DRY_RUN=false
 APPLY=false
 INTERACTIVE=false
+MODULE=""
+EXPLICIT_SETUP_TARGET=false
 
 _usage_setup() {
   cat <<'EOF'
-Usage: ops setup [--profile NAME] [--dry-run] [--apply]
+Usage: ops setup
+       ops setup [all] [--profile NAME] [--dry-run] [--apply]
+       ops setup --module MODULE [--apply]
+       ops setup project [--apply]
+       ops setup ci [--interactive] [--apply]
        ops setup init [--profile NAME] [--apply]
+       ops setup interactive [--profile NAME] [--apply]
        ops setup --interactive [--profile NAME] [--apply]
        ops setup discover [--apply]
        ops setup apply-services [--apply]
        ops setup dependencies [--interactive] [--apply]
        ops setup show [--profile NAME]
        ops setup doctor [--profile NAME]
+
+Setup modules:
+  all           Default. Project base + discovery/config/services/dependencies.
+  project       Base .ops.project directories and project config only.
+  services      Discovery-backed services/config apply path.
+  dependencies  Dependency decision preview/interview/apply.
+  ci            CI/server local env/config setup.
 
 Generates and validates project setup values:
   .ops.yaml setup/settings/profiles sections
@@ -35,19 +49,42 @@ Generates and validates project setup values:
   .ops.project/generated/discovery.json workspace discovery cache
   .ops.project/generated/project_structure.json and project_values.json metadata
 
-By default, generated setup values are empty/project-neutral. Use the
-interactive flow to fill project-specific scaffold/runtime values.
+Bare `ops setup` starts an interactive setup sequence when a terminal is
+available. In non-interactive shells it previews the full setup plan.
 EOF
 }
 
 if [[ $# -gt 0 ]]; then
   case "${1}" in
-    init|interactive)
+    all|-all|--all)
+      EXPLICIT_SETUP_TARGET=true
+      SUBCMD="generate"
+      shift
+      ;;
+    project|ci)
+      EXPLICIT_SETUP_TARGET=true
+      SUBCMD="$1"
+      shift
+      ;;
+    services)
+      EXPLICIT_SETUP_TARGET=true
+      SUBCMD="apply-services"
+      shift
+      ;;
+    init)
+      EXPLICIT_SETUP_TARGET=true
       SUBCMD="generate"
       INTERACTIVE=true
       shift
       ;;
+    interactive)
+      EXPLICIT_SETUP_TARGET=true
+      SUBCMD="wizard"
+      INTERACTIVE=true
+      shift
+      ;;
     discover|apply-services|dependencies|show|doctor|help|--help|-h)
+      EXPLICIT_SETUP_TARGET=true
       SUBCMD="$1"
       shift
       ;;
@@ -59,6 +96,11 @@ for _arg in "$@"; do
     --dry-run) DRY_RUN=true ;;
     --apply) APPLY=true ;;
     --interactive) INTERACTIVE=true ;;
+    --all|-all) EXPLICIT_SETUP_TARGET=true; SUBCMD="generate" ;;
+    --module=*) EXPLICIT_SETUP_TARGET=true; MODULE="${_arg#*=}" ;;
+    --module)
+      die "--module requires --module=name form for now" 2
+      ;;
     --profile=*) PROFILE="${_arg#*=}" ;;
     --profile)
       die "--profile requires --profile=name form for now" 2
@@ -71,9 +113,26 @@ for _arg in "$@"; do
   esac
 done
 
+if [[ -n "${MODULE}" ]]; then
+  case "${MODULE}" in
+    all) SUBCMD="generate" ;;
+    project|ci|dependencies) SUBCMD="${MODULE}" ;;
+    services) SUBCMD="apply-services" ;;
+    *) die "Unknown setup module: ${MODULE}" 2 ;;
+  esac
+fi
+
 [[ -z "${SUBCMD}" ]] && SUBCMD="generate"
 [[ "${SUBCMD}" == "help" || "${SUBCMD}" == "--help" || "${SUBCMD}" == "-h" ]] && { _usage_setup; exit 0; }
 [[ -z "${PROFILE}" ]] && PROFILE="$(setup_default_profile)"
+
+if [[ "${EXPLICIT_SETUP_TARGET}" == "false" && "${DRY_RUN}" == "false" && "${INTERACTIVE}" == "true" ]]; then
+  SUBCMD="wizard"
+fi
+
+if [[ "${EXPLICIT_SETUP_TARGET}" == "false" && "${DRY_RUN}" == "false" && "${APPLY}" == "false" && "${INTERACTIVE}" == "false" && -t 0 ]]; then
+  SUBCMD="wizard"
+fi
 
 _service_default_command() {
   local id="$1" stack="$2"
@@ -118,22 +177,81 @@ _generate_setup_json() {
 _prompt_value() {
   local label="$1" default="${2:-}" value
   if [[ -n "${default}" ]]; then
-    read -r -p "${label} [${default}]: " value
+    printf '%s [%s]: ' "${label}" "${default}" >&2
+    IFS= read -r value || value=""
     printf '%s' "${value:-${default}}"
   else
-    read -r -p "${label}: " value
+    printf '%s: ' "${label}" >&2
+    IFS= read -r value || value=""
     printf '%s' "${value}"
   fi
 }
 
 _prompt_yes_no() {
   local label="$1" default="${2:-n}" value
-  read -r -p "${label} [${default}]: " value
+  printf '%s [%s]: ' "${label}" "${default}" >&2
+  IFS= read -r value || value=""
   value="${value:-${default}}"
   case "${value}" in
     y|Y|yes|YES|Yes) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+_setup_wizard_choose() {
+  local label="$1" default="${2:-y}"
+  _prompt_yes_no "${label}" "${default}"
+}
+
+_run_setup_wizard() {
+  ops_section "ops setup"
+  printf 'Interactive setup sequence\n'
+  printf 'Project: %s\n' "${OPS_PROJECT_ROOT}"
+  printf 'Profile: %s\n\n' "${PROFILE}"
+
+  local run_project=false run_services=false run_dependencies=false run_ci=false
+
+  if _setup_wizard_choose "Create/update base .ops.project structure?" "y"; then
+    run_project=true
+  fi
+  if _setup_wizard_choose "Discover and apply runtime services/config?" "y"; then
+    run_services=true
+  fi
+  if _setup_wizard_choose "Review service dependencies?" "y"; then
+    run_dependencies=true
+  fi
+  if _setup_wizard_choose "Configure local CI/deploy env and SSH metadata?" "n"; then
+    run_ci=true
+  fi
+
+  printf '\n'
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    APPLY=false
+    ops_info "Dry run selected. Wizard will preview selected modules."
+  elif [[ "${APPLY}" == "true" ]]; then
+    ops_info "Apply mode selected from --apply."
+  elif _setup_wizard_choose "Apply selected setup modules now?" "y"; then
+    APPLY=true
+  else
+    APPLY=false
+  fi
+  INTERACTIVE=true
+
+  if [[ "${run_project}" == "true" ]]; then
+    _run_project_setup
+  fi
+  if [[ "${run_services}" == "true" ]]; then
+    _run_apply_services
+  fi
+  if [[ "${run_dependencies}" == "true" ]]; then
+    _run_dependencies
+  fi
+  if [[ "${run_ci}" == "true" ]]; then
+    _run_ci_setup_module
+  fi
+
+  printf '\n'
+  ops_ok "Setup sequence complete"
 }
 
 _interactive_setup_json() {
@@ -205,6 +323,88 @@ _interactive_setup_json() {
 _generate_profile_json() {
   local profile="$1"
   jq -n '{remote: {host: "", user: "", path: "", ssh_key_path: ""}, docker: {network: "", compose_files: []}, healthchecks: {}, certificates: {provider: "", domain: ""}}'
+}
+
+_write_project_gitignore() {
+  local file="${OPS_PROJECT_STATE_DIR}/.gitignore"
+  mkdir -p "${OPS_PROJECT_STATE_DIR}"
+  if [[ ! -f "${file}" ]]; then
+    {
+      printf '# Generated by ops. .ops.project is local project state.\n'
+      printf 'secrets/\n'
+      printf 'logs/\n'
+      printf 'run/\n'
+    } > "${file}"
+    ops_ok "Wrote ${file#${OPS_PROJECT_ROOT}/}"
+  else
+    local changed=false
+    for item in 'secrets/' 'logs/' 'run/'; do
+      if ! grep -qx "${item}" "${file}" 2>/dev/null; then
+        printf '%s\n' "${item}" >> "${file}"
+        changed=true
+      fi
+    done
+    [[ "${changed}" == "true" ]] && ops_ok "Updated ${file#${OPS_PROJECT_ROOT}/}"
+  fi
+  return 0
+}
+
+_project_base_json() {
+  require_bins jq
+  local project_name
+  project_name="$(basename "${OPS_PROJECT_ROOT}")"
+  if manifest_exists; then
+    project_name="$(yq e '.project.name // ""' "${OPS_MANIFEST}" 2>/dev/null || true)"
+    [[ -z "${project_name}" || "${project_name}" == "null" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
+  elif [[ -f "${OPS_PROJECT_CONFIG_DIR}/project.json" ]]; then
+    project_name="$(jq -r '.name // empty' "${OPS_PROJECT_CONFIG_DIR}/project.json" 2>/dev/null || true)"
+    [[ -z "${project_name}" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
+  fi
+
+  jq -n \
+    --arg version "1" \
+    --arg generated_at "$(ops_timestamp)" \
+    --arg name "${project_name}" \
+    --arg root "${OPS_PROJECT_ROOT}" \
+    --arg config_dir ".ops.project/config" \
+    --arg generated_dir ".ops.project/generated" \
+    '{
+      version: $version,
+      generated_at: $generated_at,
+      name: $name,
+      root: $root,
+      config_dir: $config_dir,
+      generated_dir: $generated_dir
+    }'
+}
+
+_ensure_project_base() {
+  mkdir -p "${OPS_PROJECT_STATE_DIR}" "${OPS_PROJECT_CONFIG_DIR}" "${OPS_PROJECT_GENERATED_DIR}" "${OPS_PROJECT_LOG_DIR}" "${OPS_PROJECT_RUN_DIR}" "${OPS_PROFILES_DIR}"
+  _write_project_gitignore
+  if [[ ! -f "${OPS_PROJECT_CONFIG_DIR}/project.json" ]]; then
+    _project_base_json > "${OPS_PROJECT_CONFIG_DIR}/project.json"
+    ops_ok "Wrote .ops.project/config/project.json"
+  else
+    ops_ok "Project base exists: .ops.project"
+  fi
+}
+
+_run_project_setup() {
+  ops_section "ops setup project"
+  printf 'Project state dir: %s\n' "${OPS_PROJECT_STATE_DIR#${OPS_PROJECT_ROOT}/}"
+  printf 'Config dir: %s\n' "${OPS_PROJECT_CONFIG_DIR#${OPS_PROJECT_ROOT}/}"
+  printf 'Generated dir: %s\n' "${OPS_PROJECT_GENERATED_DIR#${OPS_PROJECT_ROOT}/}"
+  printf 'Logs dir: %s\n' "${OPS_PROJECT_LOG_DIR#${OPS_PROJECT_ROOT}/}"
+  printf 'Run dir: %s\n' "${OPS_PROJECT_RUN_DIR#${OPS_PROJECT_ROOT}/}"
+  printf 'Profiles dir: %s\n' "${OPS_PROFILES_DIR#${OPS_PROJECT_ROOT}/}"
+
+  if [[ "${APPLY}" != "true" ]]; then
+    printf '\n'
+    ops_info "Preview only. Use --apply to create the base .ops.project structure."
+    return 0
+  fi
+
+  _ensure_project_base
 }
 
 _manifest_service_process_exists() {
@@ -1051,7 +1251,7 @@ _run_apply_services() {
   yq e -P -i '.' "${OPS_MANIFEST}"
   rm -f "${services_tmp}"
 
-  mkdir -p "${OPS_PROJECT_STATE_DIR}" "${OPS_PROFILES_DIR}" "${OPS_PROJECT_GENERATED_DIR}" "${OPS_PROJECT_CONFIG_DIR}" "${OPS_PROJECT_LOG_DIR}" "${OPS_PROJECT_RUN_DIR}"
+  _ensure_project_base
   printf '%s\n' "${discovery_json}" > "${OPS_DISCOVERY_FILE}"
   _materialize_project_config_from_discovery "${discovery_json}" "${setup_json}" "${profile_json}" "${decisions_json}"
   printf '%s\n' "${setup_json}" > "${OPS_PROJECT_GENERATED_DIR}/setup.json"
@@ -1068,6 +1268,7 @@ _run_dependencies() {
   local discovery_json decisions_json setup_json profile_json services_config
 
   ops_section "ops setup dependencies"
+  [[ "${APPLY}" == "true" ]] && _ensure_project_base
   discovery_json="$(discovery_scan_project_json)"
   decisions_json="$(_resolve_setup_decisions_json "${discovery_json}")"
   discovery_json="$(_apply_discovery_decisions_json "${discovery_json}" "${decisions_json}")"
@@ -1083,7 +1284,7 @@ _run_dependencies() {
     return 0
   fi
 
-  mkdir -p "${OPS_PROJECT_STATE_DIR}" "${OPS_PROFILES_DIR}" "${OPS_PROJECT_GENERATED_DIR}" "${OPS_PROJECT_CONFIG_DIR}" "${OPS_PROJECT_LOG_DIR}" "${OPS_PROJECT_RUN_DIR}"
+  _ensure_project_base
   printf '%s\n' "${discovery_json}" > "${OPS_DISCOVERY_FILE}"
   _materialize_project_config_from_discovery "${discovery_json}" "${setup_json}" "${profile_json}" "${decisions_json}"
   printf '%s\n' "${setup_json}" > "${OPS_PROJECT_GENERATED_DIR}/setup.json"
@@ -1091,6 +1292,25 @@ _run_dependencies() {
 
   ops_ok "Updated dependency decisions in .ops.project/config/decisions.json"
   ops_ok "Updated service dependencies in .ops.project/config/services.json"
+}
+
+_run_ci_setup_module() {
+  ops_section "ops setup ci"
+  if [[ "${APPLY}" == "true" ]]; then
+    _ensure_project_base
+  fi
+
+  local args=(setup)
+  [[ "${INTERACTIVE}" == "true" ]] && args+=(--interactive)
+  [[ "${APPLY}" == "true" ]] && args+=(--apply)
+  [[ -n "${PROFILE}" ]] && args+=(--profile "${PROFILE}")
+  bash "${_SELF_DIR}/ci.sh" "${args[@]}"
+
+  if [[ "${APPLY}" == "true" ]]; then
+    bash "${_SELF_DIR}/ci.sh" env --apply
+  else
+    ops_info "CI env template is a separate local file. Preview with: ops ci env"
+  fi
 }
 
 _interactive_profile_json() {
@@ -1293,7 +1513,7 @@ _apply_generated() {
   fi
 
   _backup_file "${OPS_MANIFEST}"
-  mkdir -p "${OPS_PROJECT_STATE_DIR}" "${OPS_PROFILES_DIR}" "${OPS_PROJECT_GENERATED_DIR}" "${OPS_PROJECT_CONFIG_DIR}" "${OPS_PROJECT_LOG_DIR}" "${OPS_PROJECT_RUN_DIR}"
+  _ensure_project_base
   if [[ -s "${discovery_tmp}" ]]; then
     printf '%s\n' "$(cat "${discovery_tmp}")" > "${OPS_DISCOVERY_FILE}"
     discovery_file="${OPS_DISCOVERY_FILE}"
@@ -1370,6 +1590,15 @@ _doctor_setup() {
 }
 
 case "${SUBCMD}" in
+  wizard)
+    _run_setup_wizard
+    ;;
+  project)
+    _run_project_setup
+    ;;
+  ci)
+    _run_ci_setup_module
+    ;;
   discover)
     _run_discovery
     ;;

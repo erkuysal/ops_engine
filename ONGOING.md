@@ -23,6 +23,9 @@ The immediate goal is:
 - `ops install` installs a global Bash launcher instead of doing project setup
 - runtime commands write shared run-plan artifacts before display/execution
 - setup can preview/apply dependency decisions into project config
+- ops has an initial CI credential/server metadata command
+- setup supports lightweight module routing
+- bare `ops setup` starts a guided setup sequence when run in a terminal
 
 ## Recently Completed
 
@@ -103,6 +106,27 @@ The immediate goal is:
   - `ops setup dependencies --apply` writes dependency decisions to `.ops.project/config/decisions.json`
   - selected dependencies are materialized into `.ops.project/config/services.json`
   - setup preserves existing `.ops.yaml` service fields while config is regenerated
+- Added basic CI readiness support:
+  - `ops ci setup` previews non-secret CI/server metadata
+  - `ops ci setup --apply` writes `.ops.project/config/ci.json`
+  - `ops ci env --apply` creates `.ops.project/secrets/ci.env` as the local-first secrets/config file
+  - `ops ci show` displays configured repository, Docker, deploy, workflow, and expected secret names
+  - `ops ci doctor` loads local env config and checks required metadata, local SSH key presence, and local tools
+  - `ops ci connect` previews or runs an SSH server check from local env/config
+  - `ops ci secrets` prints GitHub Actions secret setup guidance without exposing secret values
+  - `ops ci ssh-key` previews or generates a deploy SSH key with `--apply`
+  - CI doctor checks configured GitHub workflow files exist
+  - GitHub Actions is optional; local env + SSH is the primary flow
+- Added modular setup routing:
+  - bare `ops setup` opens the guided interactive setup sequence in terminals
+  - `ops setup all` keeps the current full setup flow
+  - non-interactive bare `ops setup` keeps preview behavior
+  - `ops setup project` creates/previews base `.ops.project` structure
+  - `ops setup services` aliases discovery-backed service setup
+  - `ops setup dependencies` remains the dependency module
+  - `ops setup ci` runs CI config/env setup through the setup entry point
+  - `--module=project|services|dependencies|ci|all` is supported
+  - `ops setup interactive` and bare `ops setup --interactive` route to the guided sequence
 
 ## Active Problems
 
@@ -357,6 +381,10 @@ Current useful checks:
 bash ops.sh setup discover
 bash ops.sh setup discover --apply
 bash ops.sh setup --dry-run
+bash ops.sh setup project
+bash ops.sh setup ci
+bash ops.sh ci setup
+bash ops.sh ci doctor
 bash ops.sh show start userengine
 bash ops.sh start userengine --dry-run
 bash ops.sh run build userengine

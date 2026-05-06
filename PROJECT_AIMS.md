@@ -68,6 +68,26 @@ It should:
 
 `setup` should be idempotent. Re-running it should preserve confirmed project decisions, update stale discovery facts, and ask only about new or unresolved ambiguity.
 
+Setup should feel like modern framework initializers: running bare `ops setup`
+in a terminal should open a guided interactive sequence that asks which modules
+to run, applies selected changes when confirmed, and falls back to a preview in
+non-interactive shells.
+
+Setup should also be modular and lightweight. Explicit module commands should
+remain deterministic and scriptable, while individual modules can be run
+directly:
+
+```bash
+ops setup
+ops setup all
+ops setup project
+ops setup services
+ops setup dependencies
+ops setup ci
+```
+
+The `project` module is the base module. It owns creation of `.ops.project` and the minimum directory/config structure needed by other modules. Other modules may call it automatically when applying changes.
+
 ### Runtime Commands
 
 Runtime commands such as `ops start`, `ops stop`, `ops run`, `ops show`, and `ops logs` should consume project state created by `ops setup`.
@@ -75,6 +95,23 @@ Runtime commands such as `ops start`, `ops stop`, `ops run`, `ops show`, and `op
 They should not rediscover the whole project on every run.
 
 They should prefer `.ops.project` config/state first. During the migration period, they may fall back to `.ops.yaml`.
+
+### `ops ci`
+
+`ci` owns local CI/deploy readiness, server connection metadata, and optional hosted-CI bridges.
+
+It should:
+
+- store server/repository/registry metadata in `.ops.project/config/ci.json`
+- support local secrets/config in a private `.ops.project/secrets/ci.env` file
+- keep GitHub Actions as optional rather than required
+- record expected GitHub Actions secret names only for projects that mirror local config to GitHub
+- guide Docker Hub, SSH deploy key, GitHub secret, and server-path setup
+- provide doctor checks for local tools and missing server configuration
+- preview or generate local deploy SSH keys only when explicitly applied
+- print secret setup commands without storing secret values
+- check SSH connectivity to the configured server
+- eventually generate or validate workflow files from project config
 
 ## Desired State Layout
 
@@ -89,6 +126,9 @@ Suggested long-term shape:
     services.json
     profiles.json
     settings.json
+    ci.json
+  secrets/
+    ci.env
   generated/
     discovery.json
     workspace.json
