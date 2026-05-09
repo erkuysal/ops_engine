@@ -16,6 +16,8 @@
 #   install   — Install/doctor/repair/uninstall global ops command (LIVE)
 #   setup     — Project setup/profile generation (LIVE)
 #   ci        — CI/server credential readiness config (LIVE)
+#   ssh       — Simple server SSH connection check (LIVE)
+#   credentials — Local credential readiness check (LIVE)
 #   init      — Interactive manifest wizard (Phase 2)
 #   run       — Single-service action runner (Phase 3)
 #   show      — Read-only action execution plan inspector (LIVE)
@@ -62,6 +64,8 @@ Commands:
   install   Install/doctor/repair global ops command [live]
   setup     Project setup/profile config      [live]
   ci        CI/server credential readiness     [live]
+  ssh       Simple server SSH connection check [live]
+  credentials Local credential readiness check [live]
   init      Interactive manifest wizard       [Phase 2]
   run       Single-service action runner      [Phase 3]
   show      Show how an action would run       [live]
@@ -97,6 +101,8 @@ ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_BOLD}install${OPS_NC}   Install/doctor/repair global command ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}setup${OPS_NC}     Project setup/profile config         ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}ci${OPS_NC}        CI/server credential readiness        ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}ssh${OPS_NC}       Simple server SSH connection check    ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}credentials${OPS_NC} Local credential readiness check     ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_DIM}init      Interactive manifest wizard          [Phase 2]${OPS_NC}
   ${OPS_DIM}run       Single-service action runner         [Phase 3]${OPS_NC}
   ${OPS_BOLD}show${OPS_NC}      Show how an action would run       ${OPS_GREEN}[live]${OPS_NC}
@@ -167,6 +173,18 @@ case "${COMMAND}" in
 
   ci)
     exec bash "${_MAIN_DIR}/commands/ci.sh" "$@"
+    ;;
+
+  ssh)
+    if [[ "${1:-}" == "setup" ]]; then
+      shift
+      exec bash "${_MAIN_DIR}/commands/ci.sh" ssh-setup "$@"
+    fi
+    exec bash "${_MAIN_DIR}/commands/ci.sh" connect "$@"
+    ;;
+
+  credentials|creds)
+    exec bash "${_MAIN_DIR}/commands/ci.sh" credentials "$@"
     ;;
 
   init)

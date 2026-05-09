@@ -10,7 +10,7 @@ source "${_SELF_DIR}/../lib/setup.sh"
 
 SUBCMD="${1:-show}"
 case "${SUBCMD}" in
-  setup|show|doctor|env|connect|secrets|ssh-key|help|--help|-h) shift || true ;;
+  setup|show|doctor|credentials|creds|env|connect|ssh-setup|secrets|ssh-key|help|--help|-h) shift || true ;;
   *) SUBCMD="show" ;;
 esac
 
@@ -20,6 +20,7 @@ PROFILE=""
 KEY_PATH=""
 KEY_COMMENT="github-actions-deploy"
 REMOTE_COMMAND=""
+CONNECT_TIMEOUT="10"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -49,6 +50,12 @@ while [[ $# -gt 0 ]]; do
       REMOTE_COMMAND="$2"
       shift
       ;;
+    --timeout=*) CONNECT_TIMEOUT="${1#*=}" ;;
+    --timeout)
+      [[ $# -ge 2 ]] || die "--timeout requires a value" 2
+      CONNECT_TIMEOUT="$2"
+      shift
+      ;;
     --help|-h)
       SUBCMD="help"
       ;;
@@ -66,8 +73,10 @@ _usage_ci() {
 Usage: ops ci setup [--interactive] [--apply] [--profile NAME]
        ops ci show
        ops ci doctor
+       ops ci credentials
        ops ci env [--apply]
-       ops ci connect [--apply] [--command CMD]
+       ops ci ssh-setup [--interactive] [--apply]
+       ops ci connect [--interactive] [--apply] [--command CMD] [--timeout SECONDS]
        ops ci secrets
        ops ci ssh-key [--path PATH] [--comment TEXT] [--apply]
 
@@ -138,8 +147,15 @@ _generate_ci_config_json() {
   deploy_path="$(_existing_ci_get '.deploy.path' '')"
   deploy_key_path="$(_existing_ci_get '.deploy.ssh_key_path' "${HOME}/.ssh/github_actions_deploy")"
   local_env_file="$(_existing_ci_get '.secrets.local_env_file' '.ops.project/secrets/ci.env')"
-  workflow_server="$(_existing_ci_get '.github.workflows.server' 'ci-cd.yml')"
-  workflow_desktop="$(_existing_ci_get '.github.workflows.desktop' 'desktop-release.yml')"
+  workflow_server="$(_existing_ci_get '.github.workflows.server' '')"
+  workflow_desktop="$(_existing_ci_get '.github.workflows.desktop' '')"
+
+  if [[ -z "${workflow_server}" && -f "${OPS_PROJECT_ROOT}/.github/workflows/ci-cd.yml" ]]; then
+    workflow_server="ci-cd.yml"
+  fi
+  if [[ -z "${workflow_desktop}" && -f "${OPS_PROJECT_ROOT}/.github/workflows/desktop-release.yml" ]]; then
+    workflow_desktop="desktop-release.yml"
+  fi
   default_branch="$(_existing_ci_get '.github.default_branch' 'root')"
 
   if [[ "${INTERACTIVE}" == "true" ]]; then
@@ -236,6 +252,54 @@ _write_ci_config() {
   ops_ok "Wrote ${OPS_CI_CONFIG_FILE#${OPS_PROJECT_ROOT}/}"
 }
 
+_merge_deploy_config_json() {
+  local host="$1" user="$2" path="$3" key_path="$4"
+  _ci_config_json | jq \
+    --arg host "${host}" \
+    --arg user "${user}" \
+    --arg path "${path}" \
+    --arg key_path "${key_path}" \
+    --arg generated_at "$(ops_timestamp)" \
+    '.generated_at = $generated_at
+     | .deploy = (.deploy // {})
+     | .deploy.host = $host
+     | .deploy.user = $user
+     | .deploy.path = $path
+     | .deploy.ssh_key_path = $key_path'
+}
+
+_ci_ssh_setup() {
+  require_bins jq
+  local host user path key_path config_json
+  _load_ci_env || true
+  host="$(_ci_value '.deploy.host' DEPLOY_HOST)"
+  user="$(_ci_value '.deploy.user' DEPLOY_USER)"
+  path="$(_ci_value '.deploy.path' DEPLOY_PATH)"
+  key_path="${DEPLOY_SSH_KEY_PATH:-$(_ci_value '.deploy.ssh_key_path' DEPLOY_SSH_KEY_PATH)}"
+
+  ops_section "ops ci ssh-setup"
+  if [[ "${INTERACTIVE}" == "true" ]]; then
+    host="$(_prompt_ci_value "Deploy host" "${host}")"
+    user="$(_prompt_ci_value "Deploy user" "${user}")"
+    path="$(_prompt_ci_value "Deploy path on server (optional)" "${path}")"
+    key_path="$(_prompt_ci_value "Local SSH private key path (optional)" "${key_path}")"
+  fi
+
+  config_json="$(_merge_deploy_config_json "${host}" "${user}" "${path}" "${key_path}")"
+  _print_ci_summary "${config_json}"
+  printf '\n'
+
+  if [[ "${APPLY}" == "true" ]]; then
+    if _is_unset "${host}" || _is_unset "${user}"; then
+      die "Deploy host and deploy user are required." 2
+    fi
+    _write_ci_config "${config_json}"
+    ops_info "Next: ops ssh --apply"
+  else
+    ops_info "Preview only. Use --interactive --apply to save SSH connection values."
+  fi
+}
+
 _expand_path() {
   local path="$1"
   path="${path/#\~/${HOME}}"
@@ -252,14 +316,20 @@ _ci_local_env_file() {
 }
 
 _load_ci_env() {
-  local env_file expanded
+  local env_file expanded line key value
   env_file="$(_ci_local_env_file)"
   expanded="$(_expand_path "${env_file}")"
   [[ -f "${expanded}" ]] || return 1
-  set -a
-  # shellcheck disable=SC1090
-  source <(sed 's/\r$//' "${expanded}")
-  set +a
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line}" || "${line}" == \#* || "${line}" != *=* ]] && continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    [[ "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    if [[ -z "${!key:-}" ]]; then
+      export "${key}=${value}"
+    fi
+  done < "${expanded}"
   return 0
 }
 
@@ -367,6 +437,130 @@ _doctor_ci() {
   return "${fail}"
 }
 
+_docker_config_has_registry_auth() {
+  local registry="$1" docker_config="${DOCKER_CONFIG:-${HOME}/.docker}/config.json"
+  [[ -f "${docker_config}" ]] || return 1
+
+  jq -e --arg registry "${registry}" '
+    def keys_for($r):
+      [
+        $r,
+        "https://" + $r,
+        "http://" + $r,
+        (if $r == "docker.io" then "https://index.docker.io/v1/" else empty end),
+        (if $r == "docker.io" then "index.docker.io" else empty end)
+      ];
+    (keys_for($registry)[] as $key
+      | (.auths[$key]? != null)
+        or (.credHelpers[$key]? != null)
+        or (.credsStore? != null)
+    )
+  ' "${docker_config}" >/dev/null 2>&1
+}
+
+_check_ci_credentials() {
+  require_bins jq
+  local config_json warn=0 fail=0
+  local docker_registry docker_namespace docker_username docker_password
+  local deploy_host deploy_user deploy_path key_path
+  local github_repository github_token_present=false
+
+  config_json="$(_ci_config_json)"
+  _load_ci_env || true
+
+  docker_registry="${DOCKER_REGISTRY:-$(jq -r '.docker.registry // "docker.io"' <<< "${config_json}")}"
+  docker_namespace="${DOCKER_NAMESPACE:-$(jq -r '.docker.namespace // ""' <<< "${config_json}")}"
+  docker_username="${DOCKER_USERNAME:-}"
+  docker_password="${DOCKER_PASSWORD:-}"
+  github_repository="${GITHUB_REPOSITORY:-$(jq -r '.github.repository // ""' <<< "${config_json}")}"
+  deploy_host="$(_ci_value '.deploy.host' DEPLOY_HOST)"
+  deploy_user="$(_ci_value '.deploy.user' DEPLOY_USER)"
+  deploy_path="$(_ci_value '.deploy.path' DEPLOY_PATH)"
+  key_path="${DEPLOY_SSH_KEY_PATH:-$(jq -r '.deploy.ssh_key_path // ""' <<< "${config_json}")}"
+
+  [[ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]] && github_token_present=true
+
+  ops_section "ops ci credentials"
+  if [[ -f "$(_expand_path "$(_ci_local_env_file)")" ]]; then
+    ops_ok "local env file exists: $(_ci_local_env_file)"
+  else
+    ops_warn "local env file missing: $(_ci_local_env_file)"
+    warn=$((warn + 1))
+  fi
+
+  printf '\nDocker\n'
+  if command -v docker >/dev/null 2>&1; then
+    ops_ok "docker CLI: $(command -v docker)"
+  else
+    ops_warn "docker CLI not found"
+    warn=$((warn + 1))
+  fi
+  if _is_unset "${docker_registry}"; then
+    ops_warn "docker registry missing"
+    warn=$((warn + 1))
+  else
+    ops_ok "docker registry: ${docker_registry}"
+  fi
+  if _is_unset "${docker_namespace}"; then
+    ops_warn "docker namespace missing"
+    warn=$((warn + 1))
+  else
+    ops_ok "docker namespace: ${docker_namespace}"
+  fi
+  if [[ -n "${docker_username}" ]]; then
+    ops_ok "DOCKER_USERNAME is set"
+  else
+    ops_warn "DOCKER_USERNAME is not set"
+    warn=$((warn + 1))
+  fi
+  if [[ -n "${docker_password}" ]]; then
+    ops_ok "DOCKER_PASSWORD is set"
+  else
+    ops_warn "DOCKER_PASSWORD is not set"
+    warn=$((warn + 1))
+  fi
+  if _docker_config_has_registry_auth "${docker_registry:-docker.io}"; then
+    ops_ok "docker config has auth/helper for ${docker_registry:-docker.io}"
+  else
+    ops_warn "docker config has no auth/helper for ${docker_registry:-docker.io}"
+    warn=$((warn + 1))
+  fi
+
+  printf '\nSSH Deploy\n'
+  if _is_unset "${deploy_host}"; then ops_warn "DEPLOY_HOST missing"; warn=$((warn + 1)); else ops_ok "DEPLOY_HOST is set"; fi
+  if _is_unset "${deploy_user}"; then ops_warn "DEPLOY_USER missing"; warn=$((warn + 1)); else ops_ok "DEPLOY_USER is set"; fi
+  if _is_unset "${deploy_path}"; then ops_warn "DEPLOY_PATH missing"; warn=$((warn + 1)); else ops_ok "DEPLOY_PATH is set"; fi
+  if [[ -n "${key_path}" && -f "$(_expand_path "${key_path}")" ]]; then
+    ops_ok "deploy SSH private key exists"
+  else
+    ops_warn "deploy SSH private key missing: ${key_path:-<unset>}"
+    warn=$((warn + 1))
+  fi
+
+  printf '\nGitHub Optional Bridge\n'
+  if _is_unset "${github_repository}"; then
+    ops_warn "GitHub repository missing"
+    warn=$((warn + 1))
+  else
+    ops_ok "GitHub repository: ${github_repository}"
+  fi
+  if command -v gh >/dev/null 2>&1; then
+    ops_ok "gh CLI: $(command -v gh)"
+  else
+    ops_warn "gh CLI not found"
+    warn=$((warn + 1))
+  fi
+  if [[ "${github_token_present}" == "true" ]]; then
+    ops_ok "GitHub token env is set"
+  else
+    ops_warn "GH_TOKEN/GITHUB_TOKEN not set"
+    warn=$((warn + 1))
+  fi
+
+  printf '\nCredential check: %d failed, %d warnings\n' "${fail}" "${warn}"
+  return "${fail}"
+}
+
 _write_ci_gitignore() {
   local file="${OPS_PROJECT_STATE_DIR}/.gitignore"
   mkdir -p "${OPS_PROJECT_STATE_DIR}"
@@ -433,28 +627,55 @@ _ci_env_init() {
 
 _ci_connect() {
   require_bins jq
-  local host user path key_path command ssh_args=()
+  local host user path key_path command ssh_args=() config_json
   _load_ci_env || true
   host="$(_ci_value '.deploy.host' DEPLOY_HOST)"
   user="$(_ci_value '.deploy.user' DEPLOY_USER)"
   path="$(_ci_value '.deploy.path' DEPLOY_PATH)"
   key_path="${DEPLOY_SSH_KEY_PATH:-$(_ci_value '.deploy.ssh_key_path' DEPLOY_SSH_KEY_PATH)}"
-  command="${REMOTE_COMMAND:-cd $(_shell_escape "${path}") && pwd && docker --version && docker compose version}"
 
   ops_section "ops ci connect"
-  if _is_unset "${host}" || _is_unset "${user}" || _is_unset "${path}"; then
-    die "Missing DEPLOY_HOST, DEPLOY_USER, or DEPLOY_PATH. Run: ops ci env --apply" 2
+  if [[ "${INTERACTIVE}" == "true" ]]; then
+    host="$(_prompt_ci_value "Deploy host" "${host}")"
+    user="$(_prompt_ci_value "Deploy user" "${user}")"
+    path="$(_prompt_ci_value "Deploy path on server (optional)" "${path}")"
+    key_path="$(_prompt_ci_value "Local SSH private key path (optional)" "${key_path}")"
+    config_json="$(_merge_deploy_config_json "${host}" "${user}" "${path}" "${key_path}")"
+    _print_ci_summary "${config_json}"
+    printf '\n'
+    if [[ "${APPLY}" == "true" ]]; then
+      _write_ci_config "${config_json}"
+    else
+      ops_info "Preview only. Use --apply to save SSH connection values."
+    fi
   fi
 
+  if [[ -n "${REMOTE_COMMAND}" ]]; then
+    command="${REMOTE_COMMAND}"
+  elif _is_unset "${path}"; then
+    command='printf "ops ssh ok\n"; hostname; whoami; pwd'
+  else
+    command="cd $(_shell_escape "${path}") && printf \"ops ssh ok\\n\" && hostname && whoami && pwd"
+  fi
+
+  if _is_unset "${host}" || _is_unset "${user}"; then
+    die "Missing DEPLOY_HOST or DEPLOY_USER. Run: ops ssh --interactive --apply" 2
+  fi
+
+  ssh_args+=("-o" "BatchMode=yes" "-o" "ConnectTimeout=${CONNECT_TIMEOUT}")
   if [[ -n "${key_path}" && "${key_path}" != "null" ]]; then
     key_path="$(_expand_path "${key_path}")"
+    if [[ "${APPLY}" == "true" && ! -f "${key_path}" ]]; then
+      die "Configured SSH key does not exist: ${key_path}" 2
+    fi
     ssh_args+=("-i" "${key_path}")
   fi
   ssh_args+=("${user}@${host}" "${command}")
 
   printf 'SSH target: %s@%s\n' "${user}" "${host}"
-  printf 'Deploy path: %s\n' "${path}"
+  printf 'Deploy path: %s\n' "$(_is_unset "${path}" && printf '<unset>' || printf '%s' "${path}")"
   printf 'Command: %s\n' "${command}"
+  printf 'Timeout: %ss\n' "${CONNECT_TIMEOUT}"
   if [[ "${APPLY}" != "true" ]]; then
     printf '\nPreview command:\n  ssh'
     local arg
@@ -465,6 +686,7 @@ _ci_connect() {
   fi
 
   ssh "${ssh_args[@]}"
+  ops_ok "SSH connection check succeeded"
 }
 
 _print_secret_setup() {
@@ -576,11 +798,17 @@ case "${SUBCMD}" in
   doctor)
     _doctor_ci
     ;;
+  credentials|creds)
+    _check_ci_credentials
+    ;;
   env)
     _ci_env_init
     ;;
   connect)
     _ci_connect
+    ;;
+  ssh-setup)
+    _ci_ssh_setup
     ;;
   secrets)
     _print_secret_setup

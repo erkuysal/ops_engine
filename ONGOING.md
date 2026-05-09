@@ -26,6 +26,10 @@ The immediate goal is:
 - ops has an initial CI credential/server metadata command
 - setup supports lightweight module routing
 - bare `ops setup` starts a guided setup sequence when run in a terminal
+- ops has a simple SSH connection check command backed by local CI/server config
+- `ops ssh --interactive --apply` can set SSH connection values directly
+- `ops ssh setup --interactive --apply` saves SSH values without opening a connection
+- ops has a focused credential readiness check for Docker, SSH deploy, and GitHub bridge values
 
 ## Recently Completed
 
@@ -112,7 +116,12 @@ The immediate goal is:
   - `ops ci env --apply` creates `.ops.project/secrets/ci.env` as the local-first secrets/config file
   - `ops ci show` displays configured repository, Docker, deploy, workflow, and expected secret names
   - `ops ci doctor` loads local env config and checks required metadata, local SSH key presence, and local tools
+  - `ops ci credentials` checks Docker/env/auth, SSH deploy key/config, and optional GitHub bridge readiness
+  - `ops credentials` aliases the same focused credential check
   - `ops ci connect` previews or runs an SSH server check from local env/config
+  - `ops ssh` aliases the same lightweight SSH connection check
+  - `ops ssh --interactive --apply` prompts for deploy host/user/path/key and saves them
+  - `ops ssh setup --interactive --apply` saves the same values without running SSH
   - `ops ci secrets` prints GitHub Actions secret setup guidance without exposing secret values
   - `ops ci ssh-key` previews or generates a deploy SSH key with `--apply`
   - CI doctor checks configured GitHub workflow files exist

@@ -33,6 +33,8 @@ Ops currently supports:
 - run-plan inspection before execution
 - dependency preview/interview and storage in project config
 - local-first CI/server metadata and secrets setup
+- focused credential checks for Docker, SSH deploy, and optional GitHub bridge
+- simple SSH server connection checks from local config/env
 - optional GitHub Actions secret guidance
 - WSL/Windows binary path support for cross-OS execution
 
@@ -222,10 +224,15 @@ CI support is local-first. GitHub Actions is optional.
 
 ```bash
 ops ci setup --interactive --apply
+ops ssh setup --interactive --apply
+ops ssh --interactive --apply
 ops ci env --apply
 ops ci show
 ops ci doctor
+ops ci credentials
+ops credentials
 ops ci connect
+ops ssh
 ops ci secrets
 ops ci ssh-key --apply
 ```
@@ -245,6 +252,31 @@ Local secrets can live in:
 This supports a workflow where deployment secrets stay in your own env/config,
 and ops connects to your server over SSH. GitHub Actions can still be used as a
 bridge, but it is not the foundation of the system.
+
+For the quickest connection smoke test, use:
+
+```bash
+ops ssh
+ops ssh setup --interactive --apply
+ops ssh --interactive --apply
+ops ssh --apply
+ops ssh --apply --command "hostname && whoami && pwd"
+```
+
+Use `ops ssh setup --interactive --apply` to save connection values without
+opening a remote SSH session. Without `--apply`, ops prints the exact SSH
+command it would run.
+
+For credential readiness, use:
+
+```bash
+ops credentials
+ops ci credentials
+```
+
+This checks local env/config presence, Docker username/password env values,
+Docker auth/helper config, deploy SSH key presence, and optional GitHub bridge
+readiness without printing secret values.
 
 ## Action Resolution
 
