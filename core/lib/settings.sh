@@ -11,12 +11,16 @@ OPS_PROJECT_CONFIG_SETTINGS_FILE="${OPS_PROJECT_CONFIG_SETTINGS_FILE:-${OPS_PROJ
 export OPS_SETTINGS_SOURCE OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SETTINGS_FILE
 
 settings_exists() {
-  [[ -f "${OPS_SETTINGS_SOURCE}" ]]
+  [[ -f "${OPS_SETTINGS_SOURCE}" ]] || [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]
 }
 
 settings_validate() {
-  settings_exists || return 0
-  require_bins yq
+  require_bins jq yq
+  if [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
+    jq -e '.settings // {} | type == "object"' "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" >/dev/null
+    return $?
+  fi
+  [[ -f "${OPS_SETTINGS_SOURCE}" ]] || return 0
   yq e '.settings // {}' "${OPS_SETTINGS_SOURCE}" >/dev/null
 }
 

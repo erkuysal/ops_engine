@@ -15,6 +15,13 @@ The direction is simple:
 Ops is being migrated away from project-specific shell scripts and toward a
 generic discovery, setup, run-plan, and execution model.
 
+## Contributing
+
+To change the ops package (commands, discovery, stacks, setup modules), see:
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — contributor entry point and where-to-change table
+- [docs/README.md](docs/README.md) — full documentation index (commands, libraries, stacks, probes)
+
 ## Current State
 
 Ops currently supports:
@@ -344,7 +351,7 @@ ops start userengine --dry-run
 
 Near-term direction:
 
-- make `.ops.project/config` the primary source for all project facts
+- make `.ops.project/config` the primary source for all project facts (export-yaml/import-yaml available; validate supports config-only)
 - reduce `.ops.yaml` to optional export/import or compatibility
 - improve the guided setup wizard with better module summaries
 - improve dependency graph interviews and persistence

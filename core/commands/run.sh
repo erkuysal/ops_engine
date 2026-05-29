@@ -61,7 +61,7 @@ case "${MODE}" in
 esac
 
 # ── Validate Config ──────────────────────────────────────────────────────────
-require_manifest
+require_manifest_or_config
 
 if ! manifest_list_services | grep -qFx "${SVC_ID}"; then
   ops_error "Unknown service: '${SVC_ID}'"

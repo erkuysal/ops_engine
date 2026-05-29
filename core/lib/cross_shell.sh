@@ -182,6 +182,33 @@ EOF
   return 0
 }
 
+# Run a tool with Windows-path context when the resolved binary is Windows-hosted under WSL.
+run_cross_shell_binary() {
+  local name="${1:?run_cross_shell_binary: name required}"
+  shift
+
+  ensure_cross_shell_bin "${name}" 2>/dev/null || true
+
+  if is_wsl && [[ "$(tool_host_os "${name}")" == "windows" ]]; then
+    local wincwd winexe
+    command -v powershell.exe >/dev/null 2>&1 || {
+      printf '[WARN] Windows binary %s requires powershell.exe in WSL\n' "${name}" >&2
+      "${name}" "$@"
+      return $?
+    }
+    wincwd="$(wslpath -w "$(pwd)" 2>/dev/null || true)"
+    winexe="$(tool_windows_path "${name}" 2>/dev/null || true)"
+    if [[ -n "${wincwd}" && -n "${winexe}" ]]; then
+      powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command \
+        "Set-Location -LiteralPath $(ps_single_quote "${wincwd}"); & $(ps_single_quote "${winexe}") $args" \
+        -- "$@" < /dev/null
+      return $?
+    fi
+  fi
+
+  "${name}" "$@"
+}
+
 # Ensure a binary is available: if not present in PATH and we're under WSL,
 # probe Windows and create a shim inside ${OPS_LOCAL_DIR}/bin.
 # Returns 0 if binary is available after this call, non-zero otherwise.

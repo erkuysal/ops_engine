@@ -30,6 +30,8 @@ source "${_SELF_DIR}/../lib/settings.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
 # shellcheck source=../lib/graph.sh
 source "${_SELF_DIR}/../lib/graph.sh"
+# shellcheck source=../lib/config_validate.sh
+source "${_SELF_DIR}/../lib/config_validate.sh"
 
 # ── Argument parsing ─────────────────────────────────────────────────────────
 for _arg in "$@"; do
@@ -37,7 +39,7 @@ for _arg in "$@"; do
     --plain)   OPS_PLAIN=true ;;
     --help|-h)
       printf 'Usage: ./ops.sh experimental validate [--plain]\n'
-      printf 'Validates .ops.yaml through a five-pass pipeline.\n'
+      printf 'Validates .ops.yaml or .ops.project/config through a validation pipeline.\n'
       printf 'Exit 0 = passed (warnings OK), exit 1 = errors found.\n'
       exit 0
       ;;
@@ -46,8 +48,17 @@ for _arg in "$@"; do
 done
 
 # ── Preconditions ─────────────────────────────────────────────────────────────
-require_bins yq
-require_manifest
+require_bins yq jq
+
+VALIDATE_CONFIG_ONLY=false
+if manifest_exists; then
+  manifest_prepare_validation_source
+  trap manifest_cleanup_validation_source EXIT
+elif project_config_services_exists; then
+  VALIDATE_CONFIG_ONLY=true
+else
+  die "Nothing to validate. Run ops setup --apply or create .ops.yaml." 2
+fi
 
 # ── Diagnostic collector ──────────────────────────────────────────────────────
 _ERRORS=()
@@ -327,12 +338,21 @@ _pass5_overrides() {
   fi
 
   local profile_name
-  while IFS= read -r profile_name; do
-    [[ -z "${profile_name}" || "${profile_name}" == "null" ]] && continue
-    if ! setup_profile_validate "${profile_name}" >/dev/null 2>&1; then
-      _err "Profile — invalid .ops.yaml profiles.${profile_name} section"
-    fi
-  done < <(_manifest_yq '.profiles | keys | .[]' 2>/dev/null || true)
+  if [[ "${VALIDATE_CONFIG_ONLY}" == "true" && -f "${OPS_PROJECT_CONFIG_PROFILES_FILE}" ]]; then
+    while IFS= read -r profile_name; do
+      [[ -z "${profile_name}" || "${profile_name}" == "null" ]] && continue
+      if ! setup_profile_validate "${profile_name}" >/dev/null 2>&1; then
+        _err "Profile — invalid .ops.project/config profiles.${profile_name}"
+      fi
+    done < <(jq -r '.profiles | keys[]?' "${OPS_PROJECT_CONFIG_PROFILES_FILE}" 2>/dev/null || true)
+  else
+    while IFS= read -r profile_name; do
+      [[ -z "${profile_name}" || "${profile_name}" == "null" ]] && continue
+      if ! setup_profile_validate "${profile_name}" >/dev/null 2>&1; then
+        _err "Profile — invalid .ops.yaml profiles.${profile_name} section"
+      fi
+    done < <(_manifest_yq '.profiles | keys | .[]' 2>/dev/null || true)
+  fi
 
   if [[ ! -d "${OPS_PROJECT_STATE_DIR}" ]]; then
     _warn ".ops.project/ state directory not found (run './ops.sh setup --apply')"
@@ -341,15 +361,30 @@ _pass5_overrides() {
 }
 
 # ── Run all passes ────────────────────────────────────────────────────────────
-ops_section "ops experimental validate"
-ops_info "Manifest: ${OPS_MANIFEST}"
-printf '\n'
-
-_pass1_syntax
-_pass2_structural
-_pass3_semantic
-_pass4_filesystem
-_pass5_overrides
+ops_section "ops validate"
+if [[ "${VALIDATE_CONFIG_ONLY}" == "true" ]]; then
+  ops_info "Source: .ops.project/config"
+  printf '\n'
+  ops_step 1 2 "Config validation (JSON structure, semantics, filesystem)"
+  config_validate_run _err _warn _hint
+  _pass5_overrides
+elif [[ "${MANIFEST_VALIDATE_TEMP:-false}" == "true" ]]; then
+  ops_info "Source: .ops.project/config (temporary manifest for validation)"
+  printf '\n'
+  _pass1_syntax
+  _pass2_structural
+  _pass3_semantic
+  _pass4_filesystem
+  _pass5_overrides
+else
+  ops_info "Manifest: ${OPS_MANIFEST}"
+  printf '\n'
+  _pass1_syntax
+  _pass2_structural
+  _pass3_semantic
+  _pass4_filesystem
+  _pass5_overrides
+fi
 
 # ── Print diagnostics ─────────────────────────────────────────────────────────
 printf '\n'

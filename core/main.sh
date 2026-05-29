@@ -86,6 +86,10 @@ Settings:
   .ops.yaml           Project-specific settings/setup/profiles
   .ops.project/       Generated runtime state (logs, pids, backups)
 
+Docs:
+  CONTRIBUTING.md     Contributor guide
+  docs/README.md      Package documentation index
+
 EOF
   else
     cat <<EOF
@@ -120,6 +124,10 @@ ${OPS_BOLD}Flags${OPS_NC}
 ${OPS_BOLD}Settings${OPS_NC}
   ${OPS_DIM}.ops.yaml           Project-specific settings/setup/profiles${OPS_NC}
   ${OPS_DIM}.ops.project/       Generated runtime state (logs, pids, backups)${OPS_NC}
+
+${OPS_BOLD}Docs${OPS_NC}
+  ${OPS_DIM}CONTRIBUTING.md     Contributor guide${OPS_NC}
+  ${OPS_DIM}docs/README.md      Package documentation index${OPS_NC}
 
 ${OPS_DIM}Project root: ${OPS_PROJECT_ROOT}${OPS_NC}
 

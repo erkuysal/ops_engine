@@ -45,7 +45,7 @@ if [[ -z "${TARGET}" ]]; then
   exit 2
 fi
 
-require_manifest
+require_manifest_or_config
 
 EXEC_LIST=()
 

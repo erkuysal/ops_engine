@@ -9,19 +9,22 @@ source "${_SELF_DIR}/../lib/logger.sh"
 source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
 source "${_SELF_DIR}/../lib/discovery.sh"
+source "${_SELF_DIR}/../lib/backup.sh"
 
 SUBCMD=""
 PROFILE=""
 DRY_RUN=false
 APPLY=false
 INTERACTIVE=false
+EXPORT_YAML=false
+CONFIRM_INFERRED=false
 MODULE=""
 EXPLICIT_SETUP_TARGET=false
 
 _usage_setup() {
   cat <<'EOF'
 Usage: ops setup
-       ops setup [all] [--profile NAME] [--dry-run] [--apply]
+       ops setup [all] [--profile NAME] [--dry-run] [--apply] [--export-yaml] [--confirm-inferred]
        ops setup --module MODULE [--apply]
        ops setup project [--apply]
        ops setup ci [--interactive] [--apply]
@@ -31,6 +34,8 @@ Usage: ops setup
        ops setup discover [--apply]
        ops setup apply-services [--apply]
        ops setup dependencies [--interactive] [--apply]
+       ops setup export-yaml [--apply]
+       ops setup import-yaml [--apply]
        ops setup show [--profile NAME]
        ops setup doctor [--profile NAME]
 
@@ -41,10 +46,12 @@ Setup modules:
   dependencies  Dependency decision preview/interview/apply.
   ci            CI/server local env/config setup.
 
+Generates project memory under .ops.project/config by default.
+Use --export-yaml --apply to also write or refresh .ops.yaml (optional compatibility export).
+
 Generates and validates project setup values:
-  .ops.yaml setup/settings/profiles sections
-  .ops.project/ generated state directories
   .ops.project/config project memory files
+  .ops.yaml (optional; ops setup export-yaml --apply)
   .ops.project/config/decisions.json interactive/default setup decisions
   .ops.project/generated/discovery.json workspace discovery cache
   .ops.project/generated/project_structure.json and project_values.json metadata
@@ -83,7 +90,7 @@ if [[ $# -gt 0 ]]; then
       INTERACTIVE=true
       shift
       ;;
-    discover|apply-services|dependencies|show|doctor|help|--help|-h)
+    discover|apply-services|dependencies|export-yaml|import-yaml|show|doctor|help|--help|-h)
       EXPLICIT_SETUP_TARGET=true
       SUBCMD="$1"
       shift
@@ -96,6 +103,8 @@ for _arg in "$@"; do
     --dry-run) DRY_RUN=true ;;
     --apply) APPLY=true ;;
     --interactive) INTERACTIVE=true ;;
+    --export-yaml) EXPORT_YAML=true ;;
+    --confirm-inferred) CONFIRM_INFERRED=true ;;
     --all|-all) EXPLICIT_SETUP_TARGET=true; SUBCMD="generate" ;;
     --module=*) EXPLICIT_SETUP_TARGET=true; MODULE="${_arg#*=}" ;;
     --module)
@@ -450,6 +459,8 @@ _resolve_process_decisions_json() {
   local discovery_json="$1"
   local decisions_json='[]'
   local process_entries=()
+  local prior_decisions
+  prior_decisions="$(_load_decisions_document)"
 
   mapfile -t process_entries < <(jq -r '
     .directories[]
@@ -464,11 +475,34 @@ _resolve_process_decisions_json() {
   for entry in "${process_entries[@]}"; do
     IFS=$'\t' read -r id name package <<< "${entry}"
     [[ -z "${id}" || -z "${name}" ]] && continue
-    local default_enabled enabled ambiguous reason
+    local default_enabled enabled ambiguous reason confirmed prior
+    prior="$(jq -c --arg id "${id}" --arg name "${name}" '
+      .decisions[]?
+      | select(.type == "process" and .service == $id and .name == $name and .confirmed == true)
+    ' <<< "${prior_decisions}")"
+    if [[ -n "${prior}" && "${prior}" != "null" ]]; then
+      enabled="$(jq -r '.enabled // true' <<< "${prior}")"
+      ambiguous="$(jq -r '.ambiguous // false' <<< "${prior}")"
+      reason="preserved"
+      confirmed=true
+      decisions_json="$(jq \
+        --arg id "${id}" \
+        --arg name "${name}" \
+        --arg package "${package}" \
+        --argjson enabled "${enabled}" \
+        --argjson ambiguous "${ambiguous}" \
+        --arg reason "${reason}" \
+        --argjson confirmed "${confirmed}" \
+        '. + [{type: "process", service: $id, name: $name, package: $package, enabled: $enabled, ambiguous: $ambiguous, reason: $reason, confirmed: $confirmed}]' \
+        <<< "${decisions_json}")"
+      continue
+    fi
+
     default_enabled="$(_process_output_default_enabled "${id}" "${name}")"
     enabled="${default_enabled}"
     ambiguous=false
     reason="default"
+    confirmed=false
 
     if _process_output_is_ambiguous "${id}" "${name}"; then
       ambiguous=true
@@ -482,6 +516,7 @@ _resolve_process_decisions_json() {
           enabled=false
         fi
         reason="interactive"
+        confirmed=true
       fi
     fi
 
@@ -492,7 +527,8 @@ _resolve_process_decisions_json() {
       --argjson enabled "${enabled}" \
       --argjson ambiguous "${ambiguous}" \
       --arg reason "${reason}" \
-      '. + [{type: "process", service: $id, name: $name, package: $package, enabled: $enabled, ambiguous: $ambiguous, reason: $reason}]' \
+      --argjson confirmed "${confirmed}" \
+      '. + [{type: "process", service: $id, name: $name, package: $package, enabled: $enabled, ambiguous: $ambiguous, reason: $reason, confirmed: $confirmed}]' \
       <<< "${decisions_json}")"
   done
 
@@ -532,6 +568,138 @@ _apply_discovery_decisions_json() {
 
 _json_array_to_space() {
   jq -r '(. // []) | join(" ")'
+}
+
+_load_decisions_document() {
+  if [[ -f "${OPS_PROJECT_CONFIG_DIR}/decisions.json" ]]; then
+    cat "${OPS_PROJECT_CONFIG_DIR}/decisions.json"
+  else
+    printf '%s\n' '{"version":"1","decisions":[]}'
+  fi
+}
+
+_decisions_mark_confirmed_on_apply() {
+  local decisions_json="$1"
+  if [[ "${INTERACTIVE}" == "true" || "${CONFIRM_INFERRED}" == "true" ]]; then
+    jq '.decisions = ((.decisions // []) | map(. + {confirmed: true}))' <<< "${decisions_json}"
+  else
+    printf '%s' "${decisions_json}"
+  fi
+}
+
+_sync_yaml_if_requested() {
+  [[ "${EXPORT_YAML}" != "true" ]] && return 0
+  # shellcheck source=../lib/manifest_sync.sh
+  source "${_SELF_DIR}/../lib/manifest_sync.sh"
+  manifest_export_yaml "${OPS_MANIFEST}"
+}
+
+_vite_proxy_ports() {
+  local dir="${1:?_vite_proxy_ports: directory required}"
+  local f
+  for f in vite.config.ts vite.config.js vite.config.mts vite.config.cjs; do
+    [[ -f "${dir}/${f}" ]] || continue
+    grep -Eo 'https?://[^:/]+:[0-9]+' "${dir}/${f}" 2>/dev/null |
+      grep -Eo '[0-9]+$' |
+      sort -un
+    return 0
+  done
+  return 1
+}
+
+_script_localhost_port() {
+  local text="${1:-}"
+  local port=""
+  if [[ "${text}" =~ (localhost|127\.0\.0\.1):([0-9]{2,5}) ]]; then
+    port="${BASH_REMATCH[2]}"
+    printf '%s' "${port}"
+    return 0
+  fi
+  if [[ "${text}" =~ --port[=\ ]+([0-9]{2,5}) ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  if [[ "${text}" =~ -p[=\ ]+([0-9]{2,5}) ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
+}
+
+_discovery_infer_port() {
+  local entry="$1"
+  local stack path abs_path dev_script port="0"
+  stack="$(jq -r '.stack // ""' <<< "${entry}")"
+  path="$(jq -r '.path // ""' <<< "${entry}")"
+  abs_path="${OPS_PROJECT_ROOT}/${path}"
+
+  case "${stack}" in
+    django) printf '8000'; return 0 ;;
+    elixir-phoenix) printf '4000'; return 0 ;;
+    node)
+      dev_script="$(jq -r '.package.scripts.dev // .package.scripts.start // ""' <<< "${entry}")"
+      port="$(_script_localhost_port "${dev_script}" || true)"
+      [[ -n "${port}" ]] && { printf '%s' "${port}"; return 0; }
+      if jq -e '.package.framework? | test("vite|vue")' <<< "${entry}" >/dev/null 2>&1; then
+        printf '5173'
+        return 0
+      fi
+      printf '0'
+      ;;
+    *) printf '0' ;;
+  esac
+}
+
+_healthcheck_from_port() {
+  local port="$1"
+  [[ -n "${port}" && "${port}" != "0" ]] || return 1
+  printf 'http://localhost:%s/' "${port}"
+}
+
+_service_id_for_port() {
+  local target_port="$1" setup_json="$2"
+  jq -r --arg port "${target_port}" '
+    [.services | to_entries[] | select((.value.port // 0 | tostring) == $port)
+      | {id: .key, role: (.value.role // "app"), rank: (
+          if (.value.role // "") | test("^(api|process_group)$") then 0
+          elif (.value.role // "") == "app" then 1
+          else 2 end
+        )}]
+    | sort_by(.rank)[0].id // ""
+  ' <<< "${setup_json}"
+}
+
+_infer_service_dependencies_json() {
+  local service_id="$1" entry="$2" setup_json="$3"
+  local stack path abs_path deps_json="[]" proxy_port script_port dep_id dev_script
+
+  stack="$(jq -r '.stack // ""' <<< "${entry}")"
+  path="$(jq -r '.path // ""' <<< "${entry}")"
+  abs_path="${OPS_PROJECT_ROOT}/${path}"
+
+  if [[ "${stack}" != "node" ]]; then
+    printf '%s' "${deps_json}"
+    return 0
+  fi
+
+  while IFS= read -r proxy_port; do
+    [[ -z "${proxy_port}" ]] && continue
+    dep_id="$(_service_id_for_port "${proxy_port}" "${setup_json}")"
+    if [[ -n "${dep_id}" && "${dep_id}" != "${service_id}" ]]; then
+      deps_json="$(jq -c --arg dep "${dep_id}" 'if index($dep) then . else . + [$dep] end' <<< "${deps_json}")"
+    fi
+  done < <(_vite_proxy_ports "${abs_path}" 2>/dev/null || true)
+
+  dev_script="$(jq -r '.package.scripts.dev // .package.scripts.start // ""' <<< "${entry}")"
+  script_port="$(_script_localhost_port "${dev_script}" 2>/dev/null || true)"
+  if [[ -n "${script_port}" ]]; then
+    dep_id="$(_service_id_for_port "${script_port}" "${setup_json}")"
+    if [[ -n "${dep_id}" && "${dep_id}" != "${service_id}" ]]; then
+      deps_json="$(jq -c --arg dep "${dep_id}" 'if index($dep) then . else . + [$dep] end' <<< "${deps_json}")"
+    fi
+  fi
+
+  printf '%s' "${deps_json}"
 }
 
 _service_dependency_default_json() {
@@ -584,9 +752,13 @@ _dependency_prompt_value() {
 }
 
 _resolve_dependency_decisions_json() {
-  local discovery_json="$1" decisions_json="$2"
+  local discovery_json="$1" decisions_json="$2" setup_json="${3:-}"
   local valid_ids dependency_decisions="[]"
   local service_entries=()
+  local prior_decisions
+  prior_decisions="$(_load_decisions_document)"
+
+  [[ -n "${setup_json}" ]] || setup_json="$(_generate_setup_json_from_discovery "${discovery_json}")"
 
   valid_ids="$(jq -r '[.directories[] | select(.service == true) | .id] | join(" ")' <<< "${discovery_json}")"
 
@@ -601,7 +773,30 @@ _resolve_dependency_decisions_json() {
   for entry in "${service_entries[@]}"; do
     IFS=$'\t' read -r id path role <<< "${entry}"
     [[ -z "${id}" || "${id}" == "null" ]] && continue
-    local default_deps default_text deps_json reason confirmed reply
+    local default_deps default_text deps_json reason confirmed reply directory_entry inferred_deps prior
+
+    directory_entry="$(jq -c --arg id "${id}" '.directories[] | select(.id == $id)' <<< "${discovery_json}")"
+
+    prior="$(jq -c --arg id "${id}" '
+      .decisions[]?
+      | select(.type == "dependency" and .service == $id and .confirmed == true)
+    ' <<< "${prior_decisions}")"
+    if [[ -n "${prior}" && "${prior}" != "null" ]]; then
+      deps_json="$(jq -c '.dependencies // []' <<< "${prior}")"
+      default_text="$(_json_array_to_space <<< "${deps_json}")"
+      reason="preserved"
+      confirmed=true
+      dependency_decisions="$(jq \
+        --arg id "${id}" \
+        --arg path "${path}" \
+        --arg role "${role}" \
+        --arg reason "${reason}" \
+        --argjson confirmed "${confirmed}" \
+        --argjson dependencies "${deps_json}" \
+        '. + [{type: "dependency", service: $id, path: $path, role: $role, dependencies: $dependencies, confirmed: $confirmed, reason: $reason}]' \
+        <<< "${dependency_decisions}")"
+      continue
+    fi
 
     default_deps="$(_service_dependency_default_json "${id}")"
     default_text="$(_json_array_to_space <<< "${default_deps}")"
@@ -611,6 +806,13 @@ _resolve_dependency_decisions_json() {
 
     if [[ -n "${default_text}" ]]; then
       reason="preserved"
+    elif [[ "$(jq 'length' <<< "${default_deps}")" -eq 0 ]]; then
+      inferred_deps="$(_infer_service_dependencies_json "${id}" "${directory_entry}" "${setup_json}")"
+      if [[ "$(jq 'length' <<< "${inferred_deps}")" -gt 0 ]]; then
+        deps_json="${inferred_deps}"
+        default_text="$(_json_array_to_space <<< "${deps_json}")"
+        reason="inferred"
+      fi
     fi
 
     if [[ "${INTERACTIVE}" == "true" ]]; then
@@ -648,10 +850,11 @@ _resolve_dependency_decisions_json() {
 
 _resolve_setup_decisions_json() {
   local discovery_json="$1"
-  local decisions_json
+  local decisions_json setup_json
 
+  setup_json="$(_generate_setup_json_from_discovery "${discovery_json}")"
   decisions_json="$(_resolve_process_decisions_json "${discovery_json}")"
-  _resolve_dependency_decisions_json "${discovery_json}" "${decisions_json}"
+  _resolve_dependency_decisions_json "${discovery_json}" "${decisions_json}" "${setup_json}"
 }
 
 _discovery_human_name() {
@@ -769,7 +972,7 @@ _generate_setup_json_from_discovery() {
     stack="$(jq -r '.stack' <<< "${entry}")"
     role="$(jq -r '.role' <<< "${entry}")"
     cmd="$(_discovery_start_command "${entry}")"
-    port="0"
+    port="$(_discovery_infer_port "${entry}")"
 
     service_entry="$(jq -n \
       --arg runtime "" \
@@ -801,6 +1004,12 @@ _generate_setup_json_from_discovery() {
   if manifest_exists; then
     local existing_json
     existing_json="$(yq e -o=json '.setup // {}' "${OPS_MANIFEST}" 2>/dev/null || printf '{}')"
+  elif [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
+    existing_json="$(jq -c '.setup // {}' "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" 2>/dev/null || printf '{}')"
+  else
+    existing_json='{}'
+  fi
+  if [[ "${existing_json}" != "{}" ]]; then
     jq -n \
       --argjson proposed "${proposed_json}" \
       --argjson existing "${existing_json}" \
@@ -816,6 +1025,11 @@ _generate_setup_json_from_discovery() {
                  ($proposed.services[$id] * ($existing.services[$id] // {}))
                  | .command = $proposed.services[$id].command
                  | .role = $proposed.services[$id].role
+                 | .port = (
+                     ($proposed.services[$id].port // 0) as $proposed_port
+                     | ($existing.services[$id].port // 0) as $existing_port
+                     | if ($existing_port | tonumber) > 0 then $existing_port else $proposed_port end
+                   )
                ))
           )
       '
@@ -900,7 +1114,11 @@ _generate_services_config_json_from_discovery() {
             env_materialization: (($existing_services[]? | select(.id == $directory.id) | .env_materialization) // ""),
             env_output_file: (($existing_services[]? | select(.id == $directory.id) | .env_output_file) // ""),
             depends_on: (($decisions.decisions[]? | select(.type == "dependency" and .service == $directory.id) | .dependencies) // (($existing_services[]? | select(.id == $directory.id) | .depends_on) // [])),
-            healthcheck: (($existing_services[]? | select(.id == $directory.id) | .healthcheck) // ""),
+            healthcheck: (
+              ($existing_services[]? | select(.id == $directory.id) | .healthcheck)
+              // (if ($setup.services[$directory.id].port // 0) > 0 then "http://localhost:\($setup.services[$directory.id].port)/" else "" end)
+              // ""
+            ),
             setup: {
               command: ($setup.services[.id].command // ""),
               env_files: ($setup.services[.id].env_files // []),
@@ -909,7 +1127,10 @@ _generate_services_config_json_from_discovery() {
             },
             meta: {
               source: "setup_discovery",
-              confirmed_by_user: false
+              confirmed_by_user: (
+                (($decisions.decisions[]? | select(.type == "dependency" and .service == $directory.id and .confirmed == true)) != null)
+                or (($decisions.decisions[]? | select(.type == "process" and .service == $directory.id and .confirmed == true)) != null)
+              )
             }
           }
       ]
@@ -1187,9 +1408,14 @@ _print_discovery_config_proposal() {
 _print_service_merge_summary() {
   local services_json="$1"
 
-  printf '\nCurrent manifest services:\n'
+  printf '\nCurrent runtime services:\n'
   if manifest_exists; then
     yq e -r '.services[].id' "${OPS_MANIFEST}" 2>/dev/null |
+      while IFS= read -r id; do
+        [[ -n "${id}" && "${id}" != "null" ]] && printf '  - %s\n' "${id}"
+      done
+  elif project_config_services_exists; then
+    jq -r '.services[]?.id // empty' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null |
       while IFS= read -r id; do
         [[ -n "${id}" && "${id}" != "null" ]] && printf '  - %s\n' "${id}"
       done
@@ -1204,9 +1430,14 @@ _print_service_merge_summary() {
     done
 
   printf '\nRemoved from runtime services:\n'
-  local removed
+  local removed current_ids='[]'
+  if manifest_exists; then
+    current_ids="$(yq e -o=json '[.services[].id] // []' "${OPS_MANIFEST}" 2>/dev/null || printf '[]')"
+  elif project_config_services_exists; then
+    current_ids="$(jq -c '[.services[]?.id // empty]' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || printf '[]')"
+  fi
   removed="$(jq -r -n \
-    --argjson current "$(yq e -o=json '[.services[].id] // []' "${OPS_MANIFEST}" 2>/dev/null || printf '[]')" \
+    --argjson current "${current_ids}" \
     --argjson proposed "$(jq '[.[].id]' <<< "${services_json}")" \
     '$current - $proposed | .[]?' 2>/dev/null || true)"
   if [[ -n "${removed}" ]]; then
@@ -1218,7 +1449,7 @@ _print_service_merge_summary() {
 
 _run_apply_services() {
   require_bins jq yq
-  require_manifest
+  require_manifest_or_config
 
   local discovery_json decisions_json setup_json profile_json services_config services_json services_tmp
 
@@ -1228,29 +1459,25 @@ _run_apply_services() {
   discovery_json="$(_apply_discovery_decisions_json "${discovery_json}" "${decisions_json}")"
   setup_json="$(_generate_setup_json_from_discovery "${discovery_json}")"
   profile_json="$(_generate_profile_json "${PROFILE}")"
-  services_config="$(_generate_services_config_json_from_discovery "${discovery_json}" "${setup_json}")"
-  services_json="$(_manifest_services_json_from_config "${services_config}")"
+  services_config="$(_generate_services_config_json_from_discovery "${discovery_json}" "${setup_json}" "${decisions_json}")"
+  services_json="$(jq -c '.services' <<< "${services_config}")"
 
   _print_discovery_preview "${discovery_json}"
   _print_dependency_decisions_preview "${decisions_json}"
   _print_service_merge_summary "${services_json}"
 
-  printf '\nProposed .ops.yaml services:\n'
-  yq e -P - <<< "${services_json}"
+  printf '\nProposed runtime services:\n'
+  jq -r '.[].id' <<< "${services_json}" | while IFS= read -r id; do
+    [[ -n "${id}" ]] && printf '  + %s\n' "${id}"
+  done
 
   if [[ "${APPLY}" != "true" ]]; then
     printf '\n'
-    ops_info "Preview only. Use --apply to replace .ops.yaml services with discovered runtime services."
+    ops_info "Preview only. Use --apply to write .ops.project/config/services.json."
     return 0
   fi
 
-  services_tmp="$(mktemp)"
-  printf '%s\n' "${services_json}" > "${services_tmp}"
-  _backup_file "${OPS_MANIFEST}"
-  yq e -i ".services = load(\"${services_tmp}\")" "${OPS_MANIFEST}"
-  yq e -P -i '.' "${OPS_MANIFEST}"
-  rm -f "${services_tmp}"
-
+  decisions_json="$(_decisions_mark_confirmed_on_apply "${decisions_json}")"
   _ensure_project_base
   printf '%s\n' "${discovery_json}" > "${OPS_DISCOVERY_FILE}"
   _materialize_project_config_from_discovery "${discovery_json}" "${setup_json}" "${profile_json}" "${decisions_json}"
@@ -1259,7 +1486,12 @@ _run_apply_services() {
   _materialize_project_structure_reference
   _materialize_project_values_metadata
 
-  ops_ok "Updated .ops.yaml services from discovery"
+  ops_ok "Updated .ops.project/config/services.json from discovery"
+  if [[ "${EXPORT_YAML}" == "true" ]]; then
+    _sync_yaml_if_requested
+  else
+    ops_info "Config updated. Use --export-yaml --apply to sync .ops.yaml."
+  fi
 }
 
 _run_dependencies() {
@@ -1286,6 +1518,7 @@ _run_dependencies() {
 
   _ensure_project_base
   printf '%s\n' "${discovery_json}" > "${OPS_DISCOVERY_FILE}"
+  decisions_json="$(_decisions_mark_confirmed_on_apply "${decisions_json}")"
   _materialize_project_config_from_discovery "${discovery_json}" "${setup_json}" "${profile_json}" "${decisions_json}"
   printf '%s\n' "${setup_json}" > "${OPS_PROJECT_GENERATED_DIR}/setup.json"
   printf '%s\n' "${profile_json}" > "$(setup_profile_file "${PROFILE}")"
@@ -1512,7 +1745,11 @@ _apply_generated() {
     _generate_profile_json "${PROFILE}" > "${profile_tmp}"
   fi
 
-  _backup_file "${OPS_MANIFEST}"
+  decisions_tmp="$(_decisions_mark_confirmed_on_apply "$(cat "${decisions_tmp}")")"
+  printf '%s\n' "${decisions_tmp}" > "${decisions_tmp}.confirmed"
+  mv "${decisions_tmp}.confirmed" "${decisions_tmp}"
+
+  [[ "${EXPORT_YAML}" == "true" && -f "${OPS_MANIFEST}" ]] && _backup_file "${OPS_MANIFEST}"
   _ensure_project_base
   if [[ -s "${discovery_tmp}" ]]; then
     printf '%s\n' "$(cat "${discovery_tmp}")" > "${OPS_DISCOVERY_FILE}"
@@ -1520,51 +1757,98 @@ _apply_generated() {
     _materialize_project_config_from_discovery "$(cat "${discovery_tmp}")" "$(cat "${setup_tmp}")" "$(cat "${profile_tmp}")" "$(cat "${decisions_tmp}")"
     ops_ok "Wrote ${discovery_file#${OPS_PROJECT_ROOT}/}"
   fi
-  if [[ "${had_manifest}" == "true" ]]; then
-    yq e -i ".setup = load(\"${setup_tmp}\") | .profiles.${PROFILE} = load(\"${profile_tmp}\")" "${OPS_MANIFEST}"
-    yq e -P -i '.' "${OPS_MANIFEST}"
-    yq e -o=json -I=2 ".setup" "${OPS_MANIFEST}" > "${OPS_PROJECT_GENERATED_DIR}/setup.json"
-    yq e -o=json -I=2 ".profiles.${PROFILE}" "${OPS_MANIFEST}" > "$(setup_profile_file "${PROFILE}")"
-    ops_ok "Updated .ops.yaml setup section"
-    ops_ok "Updated .ops.yaml profiles.${PROFILE} section"
-  else
-    _write_manifest_from_discovery "$(cat "${discovery_tmp}")" "$(cat "${setup_tmp}")" "$(cat "${profile_tmp}")" "$(cat "${decisions_tmp}")"
-    cp "${setup_tmp}" "${OPS_PROJECT_GENERATED_DIR}/setup.json"
-    cp "${profile_tmp}" "$(setup_profile_file "${PROFILE}")"
-  fi
+  cp "${setup_tmp}" "${OPS_PROJECT_GENERATED_DIR}/setup.json"
+  cp "${profile_tmp}" "$(setup_profile_file "${PROFILE}")"
   rm -f "${OPS_PROJECT_GENERATED_DIR}/setup.yaml" "${OPS_PROFILES_DIR}/${PROFILE}.yaml" >/dev/null 2>&1 || true
   _materialize_project_structure_reference
   _materialize_project_values_metadata
   rm -f "${setup_tmp}" "${profile_tmp}" "${discovery_tmp}" "${decisions_tmp}" "${discovery_tmp}.decided"
-  ops_ok "Materialized .ops.project/generated/setup.json and .ops.project/profiles/${PROFILE}.json"
+  ops_ok "Materialized .ops.project/config and generated setup artifacts"
+  if [[ "${EXPORT_YAML}" == "true" ]]; then
+    _sync_yaml_if_requested
+  elif [[ "${had_manifest}" == "true" ]]; then
+    ops_info "Config updated. .ops.yaml unchanged. Use --export-yaml --apply to sync YAML from config."
+  else
+    ops_info "Config written. .ops.yaml not created. Use ops setup export-yaml --apply when needed."
+  fi
 }
 
 _show_setup() {
+  require_manifest_or_config
   ops_section "ops setup show"
   printf 'Root config: %s (%s)\n' "${OPS_MANIFEST#${OPS_PROJECT_ROOT}/}" "$([[ -f "${OPS_MANIFEST}" ]] && printf exists || printf missing)"
+  printf 'Project config: .ops.project/config (%s)\n' "$(project_config_services_exists && printf exists || printf missing)"
   printf 'Profile: %s\n' "${PROFILE}"
   printf 'Materialized profile: %s (%s)\n' ".ops.project/profiles/${PROFILE}.json" "$( [[ -f "$(setup_profile_file "${PROFILE}")" ]] && printf exists || printf missing)"
-  printf '\n'
-  if setup_exists; then
+  printf '\nSetup\n'
+  if [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
+    jq '.setup // {}' "${OPS_PROJECT_CONFIG_SETTINGS_FILE}"
+  elif setup_exists; then
     yq e -P '.setup' "${OPS_MANIFEST}"
   else
     _generate_setup_json
   fi
   printf '\nProfile config\n'
-  if [[ "$(yq e ".profiles.${PROFILE} // \"\"" "${OPS_MANIFEST}" 2>/dev/null)" != "" ]]; then
+  if [[ -f "${OPS_PROJECT_CONFIG_PROFILES_FILE}" ]] && \
+     [[ "$(jq -r --arg p "${PROFILE}" '.profiles[$p] // ""' "${OPS_PROJECT_CONFIG_PROFILES_FILE}" 2>/dev/null)" != "" ]]; then
+    jq --arg p "${PROFILE}" '.profiles[$p]' "${OPS_PROJECT_CONFIG_PROFILES_FILE}"
+  elif [[ "$(yq e ".profiles.${PROFILE} // \"\"" "${OPS_MANIFEST}" 2>/dev/null)" != "" ]]; then
     yq e -P ".profiles.${PROFILE}" "${OPS_MANIFEST}"
   else
     _generate_profile_json "${PROFILE}"
   fi
 }
 
+_run_export_yaml() {
+  # shellcheck source=../lib/manifest_sync.sh
+  source "${_SELF_DIR}/../lib/manifest_sync.sh"
+
+  ops_section "ops setup export-yaml"
+  project_config_services_exists || die "Missing .ops.project/config/services.json. Run ops setup --apply first." 2
+
+  if [[ "${APPLY}" != "true" ]]; then
+    ops_info "Preview only. Use --apply to write ${OPS_MANIFEST#${OPS_PROJECT_ROOT}/} from .ops.project/config."
+    manifest_json_from_project_config | yq e -P '.' | head -n 60
+    return 0
+  fi
+
+  manifest_export_yaml "${OPS_MANIFEST}"
+}
+
+_run_import_yaml() {
+  # shellcheck source=../lib/manifest_sync.sh
+  source "${_SELF_DIR}/../lib/manifest_sync.sh"
+
+  ops_section "ops setup import-yaml"
+  manifest_exists || die "No .ops.yaml to import at ${OPS_MANIFEST}" 2
+
+  if [[ "${APPLY}" != "true" ]]; then
+    ops_info "Preview only. Use --apply to materialize .ops.yaml into .ops.project/config/."
+    yq e -P '.services[].id' "${OPS_MANIFEST}" 2>/dev/null | sed 's/^/  service: /'
+    return 0
+  fi
+
+  manifest_import_yaml
+}
+
 _doctor_setup() {
   local fail=0
+  require_manifest_or_config
   ops_section "ops setup doctor"
-  require_bins yq
+  require_bins jq yq
 
-  if setup_validate; then ops_ok ".ops.yaml setup section valid or not yet generated"; else ops_error ".ops.yaml setup section invalid"; fail=$((fail+1)); fi
-  if setup_profile_validate "${PROFILE}"; then ops_ok ".ops.yaml profiles.${PROFILE} valid or not yet generated"; else ops_error ".ops.yaml profiles.${PROFILE} invalid"; fail=$((fail+1)); fi
+  if setup_validate; then
+    ops_ok "setup config valid or not yet generated"
+  else
+    ops_error "setup config invalid"
+    fail=$((fail+1))
+  fi
+  if setup_profile_validate "${PROFILE}"; then
+    ops_ok "profiles.${PROFILE} valid or not yet generated"
+  else
+    ops_error "profiles.${PROFILE} invalid"
+    fail=$((fail+1))
+  fi
 
   local host user path
   host="$(setup_profile_get "${PROFILE}" '.remote.host' '')"
@@ -1608,12 +1892,16 @@ case "${SUBCMD}" in
   dependencies)
     _run_dependencies
     ;;
+  export-yaml)
+    _run_export_yaml
+    ;;
+  import-yaml)
+    _run_import_yaml
+    ;;
   show)
-    require_manifest
     _show_setup
     ;;
   doctor)
-    require_manifest
     _doctor_setup
     ;;
   generate)
@@ -1629,7 +1917,7 @@ case "${SUBCMD}" in
       if [[ "${APPLY}" == "true" ]]; then
         _apply_generated
       else
-        ops_info "Preview only. Use --apply to create .ops.project/config and transitional .ops.yaml."
+        ops_info "Preview only. Use --apply to create .ops.project/config (use --export-yaml --apply for .ops.yaml)."
       fi
       exit 0
     fi

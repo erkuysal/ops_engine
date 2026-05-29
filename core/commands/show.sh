@@ -65,7 +65,7 @@ if [[ -z "${ACTION}" || -z "${SVC_ID}" ]]; then
   exit 2
 fi
 
-require_manifest
+require_manifest_or_config
 
 if ! manifest_list_services | grep -qFx "${SVC_ID}"; then
   die "Unknown service: '${SVC_ID}'" 2

@@ -153,7 +153,7 @@ case "${START_MODE}" in
   *) die "Invalid start mode '${START_MODE}' (expected foreground or background)" 2 ;;
 esac
 
-require_manifest
+require_manifest_or_config
 
 # Early cycle check ensures we don't start executing a broken graph
 graph_cycle_check

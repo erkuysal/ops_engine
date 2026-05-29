@@ -65,9 +65,48 @@ project_config_services_exists() {
 require_manifest() {
   if ! manifest_exists; then
     die "No manifest found at '${OPS_MANIFEST}'.
-  Generate one with:  ./ops.sh experimental bootstrap
-  Then validate:       ./ops.sh experimental validate" 2
+  Generate one with:  ops setup --apply
+  Export config:      ops setup export-yaml
+  Then validate:      ops validate --plain" 2
   fi
+}
+
+# Prefer .ops.yaml; fall back to exporting config to a temp manifest for validation.
+manifest_prepare_validation_source() {
+  if manifest_exists; then
+    MANIFEST_VALIDATE_SOURCE="${OPS_MANIFEST}"
+    MANIFEST_VALIDATE_TEMP=false
+    export MANIFEST_VALIDATE_SOURCE MANIFEST_VALIDATE_TEMP
+    return 0
+  fi
+  if project_config_services_exists; then
+    require_bins jq yq
+    # shellcheck source=manifest_sync.sh
+    source "${OPS_CORE_ROOT}/lib/manifest_sync.sh"
+    local tmp="${OPS_PROJECT_STATE_DIR}/.validate-manifest.yaml"
+    ensure_dir "${OPS_PROJECT_STATE_DIR}"
+    manifest_json_from_project_config | yq e -P - > "${tmp}"
+    MANIFEST_VALIDATE_SOURCE="${tmp}"
+    MANIFEST_VALIDATE_TEMP=true
+    OPS_MANIFEST="${tmp}"
+    export MANIFEST_VALIDATE_SOURCE MANIFEST_VALIDATE_TEMP OPS_MANIFEST
+    return 0
+  fi
+  die "Nothing to validate. Run ops setup --apply or create .ops.yaml." 2
+}
+
+manifest_cleanup_validation_source() {
+  if [[ "${MANIFEST_VALIDATE_TEMP:-false}" == "true" ]]; then
+    rm -f "${MANIFEST_VALIDATE_SOURCE:-}"
+  fi
+}
+
+# Require project ops state: .ops.project/config/services.json or .ops.yaml.
+require_manifest_or_config() {
+  if project_config_services_exists; then
+    return 0
+  fi
+  require_manifest
 }
 
 # Return 0 if a service with the given ID is declared in the manifest.

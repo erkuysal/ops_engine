@@ -106,7 +106,7 @@ _go_build_one() {
     windows_go_build_linux "${output}" "${package}" "$(_go_target_arch)"
   else
     printf '[INFO] Go build native: %s -> %s\n' "${package}" "${output}"
-    go build -o "${output}" "${package}" < /dev/null
+    run_cross_shell_binary go build -o "${output}" "${package}" < /dev/null
   fi
   chmod +x "${output}" 2>/dev/null || true
 }
@@ -276,7 +276,7 @@ go_dispatch() {
         _go_start_process_group
         return $?
       fi
-      go run main.go
+      run_cross_shell_binary go run main.go
       return $?
       ;;
     build)
@@ -284,11 +284,11 @@ go_dispatch() {
         _go_build_process_group
         return $?
       fi
-      go build -o app
+      run_cross_shell_binary go build -o app
       return $?
       ;;
     test)
-      go test ./...
+      run_cross_shell_binary go test ./...
       return $?
       ;;
     stop)

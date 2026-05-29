@@ -81,7 +81,7 @@ case "${SUBCMD}" in
     ;;
 esac
 
-require_manifest
+require_manifest_or_config
 
 # ── show ──────────────────────────────────────────────────────────────────────
 if [[ "${SUBCMD}" == "show" ]]; then

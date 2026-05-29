@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# .ops-core/stacks/node.sh — Node.js stack strategy stub.
-# Phase 3 will implement the full action map.
+# .ops-core/stacks/node.sh — Node.js stack strategy.
 
 set -euo pipefail
+
+_NODE_STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/init.sh
+source "${_NODE_STACK_DIR}/../lib/init.sh"
+# shellcheck source=../lib/cross_shell.sh
+source "${_NODE_STACK_DIR}/../lib/cross_shell.sh"
 
 node_dispatch() {
   local action="${1:-}"
@@ -15,19 +20,19 @@ node_dispatch() {
 
   case "${action}" in
     start)
-      npm start
+      run_cross_shell_binary npm start
       return $?
       ;;
     build)
-      npm run build
+      run_cross_shell_binary npm run build
       return $?
       ;;
     test)
-      npm test
+      run_cross_shell_binary npm test
       return $?
       ;;
     lint)
-      npm run lint
+      run_cross_shell_binary npm run lint
       return $?
       ;;
     stop)

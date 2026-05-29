@@ -21,6 +21,12 @@ It should:
 
 The long-term goal is for `.ops` itself to remain package-owned and project-independent. Project facts, generated state, runtime plans, logs, PIDs, and local decisions belong in `.ops.project`.
 
+## Documentation
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to change the package
+- [docs/architecture.md](docs/architecture.md) — discovery, setup, config, and runtime data flow
+- [docs/README.md](docs/README.md) — full module documentation index
+
 ## Command Responsibilities
 
 ### `ops install`

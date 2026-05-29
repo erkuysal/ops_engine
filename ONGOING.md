@@ -33,6 +33,10 @@ The immediate goal is:
 
 ## Recently Completed
 
+- **Config sync:** `ops setup export-yaml`, `ops setup import-yaml`, config-first `ops validate` (`core/lib/manifest_sync.sh`).
+- **Cross-shell runtime:** `run_cross_shell_binary` wired into Go and Node stacks for WSL + Windows tools.
+- **Setup inference:** port inference (Django/Phoenix/Vite), Vite-proxy dependency inference, healthcheck URLs from ports.
+- Added contributor documentation: `CONTRIBUTING.md` and comprehensive `docs/` tree (commands, setup modules, core libs, stacks, probes, extending guides).
 - Documented project direction in `.ops/PROJECT_AIMS.md`.
 - Added `.ops/ONGOING.md` as the active implementation tracker.
 - Added structured discovery cache generation:
@@ -139,81 +143,67 @@ The immediate goal is:
 
 ## Active Problems
 
-### 1. `setup` Is Not Yet The Main Initializer
+### 1. Config-first migration (mostly done)
 
-Previous behavior was split:
+**Done recently:**
 
-- `bootstrap` creates a first `.ops.yaml`
-- `init` compares detection against an existing `.ops.yaml`
-- `update` merges newly detected services
-- `setup` creates setup/profile sections and `.ops.project`
+- `ops setup --apply` writes `.ops.project/config` by default; `.ops.yaml` is opt-in via `--export-yaml --apply`
+- `ops setup export-yaml --apply` writes `.ops.yaml` from `.ops.project/config`
+- `ops setup import-yaml --apply` materializes config from `.ops.yaml`
+- `ops validate` validates JSON config directly when no `.ops.yaml` exists
+- Runtime commands accept config-only projects via `require_manifest_or_config`
+- `confirmed` decisions are tracked in `decisions.json` and respected on re-setup; apply marks decisions confirmed when interactive or `--confirm-inferred`
 
-Target behavior:
+**Still open:**
 
-- `setup` should own discovery, project config creation, `.ops.project`, and interactive fallback.
+- Gradually retire transitional `.ops.yaml` references in docs and legacy setup paths
 
-Status: largely resolved for discovery/service setup
+### 2. Discovery and setup intelligence (in progress)
 
-Notes:
+**Done recently:**
 
-- `bootstrap`, `init`, and `update` now delegate to setup-backed commands.
-- Dependency interview behavior from old `init` is not carried forward yet.
+- Structured discovery with roles, confidence, and evidence
+- Node workspace roots and shared libraries classified
+- Go `process_group` discovery from `cmd/*`
+- Port inference for Django (8000), Phoenix (4000), Vite (5173), and dev-script ports
+- Dependency inference from Vite proxy targets and dev-script localhost references
+- Healthcheck URLs derived from inferred ports during service materialization
 
-### 2. Detection Is Too Shallow
+**Still open:**
 
-Current detection emits only:
+- Deeper env file discovery
+- Docker Compose service groups and compose-native dependencies
+- Richer framework/package-manager signals in probes
+- Dependency interview parity with legacy `init` flows
 
-```text
-id, path, stack, score
-```
+### 3. Cross-platform runtime (in progress)
 
-Target detection should emit structured facts:
+**Done recently:**
 
-```json
-{
-  "path": "frontend",
-  "stack": "node",
-  "role": "workspace_root",
-  "service": false,
-  "confidence": 0.95,
-  "evidence": ["package.json", "workspaces"]
-}
-```
+- `run_cross_shell_binary` in `core/lib/cross_shell.sh`
+- Go and Node stacks route through cross-shell execution under WSL + Windows tools
+- Windows Go cross-compile path for process groups (`windows_go_build_linux`)
 
-### 3. Node Workspace Roots Are Misclassified
+**Still open:**
 
-Current detection proposes `frontend` as a runnable Node service because it has `package.json`.
+- Broader runtime coverage (Python/Django conda paths, Rust, etc.)
+- Remove remaining project-specific command overrides once generic paths are verified
+- Document limitations in README operator guide
 
-For this repo, target classification is:
+### 4. Legacy and compatibility
 
-- `frontend`: `workspace_root`, not service
-- `frontend/web`: Node/Vite app service
-- `frontend/soundilerry`: Electron/Node app service
-- `frontend/api_core`: shared library or non-runtime package
+**Status:** manageable
 
-### 4. Go Process Groups Are Not Discovered Automatically
+- `bootstrap`, `init`, and `update` delegate to setup-backed commands
+- Legacy deploy bridge remains for ship/build/deploy actions
+- Prefer native stacks and `.ops.project` config for dev workflows
 
-UserEngine is now configured manually as a Go process group.
+## Recently Completed (implementation slices)
 
-Target behavior:
-
-- setup discovers `cmd/*`
-- setup proposes `runner.kind: process_group`
-- setup infers build outputs:
-  - `gateway -> ./cmd/gateway`
-  - `api -> ./cmd/api`
-  - `sweeper -> ./cmd/worker-sweeper`
-  - `debouncer -> ./cmd/worker-debouncer`
-
-### 5. `.ops.project` Is Not Yet The Primary Project Memory
-
-Current runtime still primarily reads `.ops.yaml`.
-
-Target behavior:
-
-- `.ops.project/config` becomes primary
-- `.ops.yaml` remains transitional/exportable
-- runtime commands prefer `.ops.project/config`, then fall back to `.ops.yaml`
+- **Slice A — Config sync:** `manifest_sync.sh`, export/import-yaml, config-first validate
+- **Slice B — Cross-shell:** `run_cross_shell_binary`, Go/Node stack integration
+- **Slice C — Setup inference:** port inference, Vite proxy dependency inference, setup port merge fix
+- **Contributor docs:** `CONTRIBUTING.md` and comprehensive `docs/` tree
 
 ## Planned Implementation Slices
 
@@ -411,7 +401,8 @@ bash ops.sh update
 Known current issue:
 
 ```text
-Dependency inference is still mostly user-confirmed/preserved; automatic dependency inference remains future work.
+Dependency inference is heuristic (Vite proxy + dev-script ports). Review with
+`ops setup dependencies` before `--apply`. Interactive mode still overrides inference.
 ```
 
 ## Open Decisions

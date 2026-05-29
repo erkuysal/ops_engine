@@ -20,7 +20,7 @@ OPS_PROJECT_CONFIG_PROFILES_FILE="${OPS_PROJECT_CONFIG_DIR}/profiles.json"
 export OPS_SETUP_FILE OPS_PROJECT_STATE_DIR OPS_PROJECT_LOG_DIR OPS_PROJECT_RUN_DIR OPS_PROJECT_GENERATED_DIR OPS_PROJECT_CONFIG_DIR OPS_PROJECT_HISTORY_DIR OPS_PROFILES_DIR OPS_PROJECT_CONFIG_SETTINGS_FILE OPS_PROJECT_CONFIG_PROFILES_FILE
 
 setup_exists() {
-  [[ -f "${OPS_SETUP_FILE}" ]]
+  [[ -f "${OPS_SETUP_FILE}" ]] || [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]
 }
 
 setup_profile_file() {
@@ -51,6 +51,12 @@ _setup_generated_get() {
 }
 
 setup_default_profile() {
+  if [[ -f "${OPS_PROJECT_CONFIG_PROFILES_FILE}" ]]; then
+    require_bins jq
+    local profile
+    profile="$(jq -r '.default_profile // ""' "${OPS_PROJECT_CONFIG_PROFILES_FILE}" 2>/dev/null || true)"
+    [[ -n "${profile}" && "${profile}" != "null" ]] && { printf '%s' "${profile}"; return 0; }
+  fi
   if setup_exists; then
     local profile
     profile="$(yq e '.setup.default_profile // ""' "${OPS_SETUP_FILE}" 2>/dev/null || true)"
@@ -61,15 +67,24 @@ setup_default_profile() {
 }
 
 setup_validate() {
-  require_bins yq
-  setup_exists || return 0
+  require_bins jq yq
+  if [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
+    jq -e '.setup // {} | type == "object"' "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" >/dev/null
+    return $?
+  fi
+  [[ -f "${OPS_SETUP_FILE}" ]] || return 0
   yq e '.setup // {}' "${OPS_SETUP_FILE}" >/dev/null
 }
 
 setup_profile_validate() {
   local profile="$1"
-  require_bins yq
-  setup_exists || return 0
+  require_bins jq yq
+  if [[ -f "${OPS_PROJECT_CONFIG_PROFILES_FILE}" ]]; then
+    jq -e --arg profile "${profile}" '.profiles[$profile] // {} | type == "object"' \
+      "${OPS_PROJECT_CONFIG_PROFILES_FILE}" >/dev/null
+    return $?
+  fi
+  [[ -f "${OPS_SETUP_FILE}" ]] || return 0
   yq e ".profiles.${profile} // {}" "${OPS_SETUP_FILE}" >/dev/null
 }
 
