@@ -23,6 +23,7 @@
 #   show      — Read-only action execution plan inspector (LIVE)
 #   start     — Dependency-aware service start (Phase 4)
 #   stop      — Dependency-aware service stop (Phase 5)
+#   status    — Service runtime status (LIVE)
 #   logs      — Multiplexed service logs (Phase 5)
 #   update    — Manifest self-healing update (Phase 7)
 #   version   — Print orchestrator version
@@ -71,6 +72,7 @@ Commands:
   show      Show how an action would run       [live]
   start     Dependency-aware start            [Phase 4]
   stop      Dependency-aware stop             [Phase 5]
+  status    Service runtime status            [live]
   logs      Multiplexed logs stream           [Phase 5]
   update    Manifest self-healing update      [Phase 7]
   env       show/doctor env context           [live]
@@ -111,6 +113,9 @@ ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_DIM}run       Single-service action runner         [Phase 3]${OPS_NC}
   ${OPS_BOLD}show${OPS_NC}      Show how an action would run       ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_DIM}start     Dependency-aware start               [Phase 4]${OPS_NC}
+  ${OPS_BOLD}status${OPS_NC}    Service runtime status (PIDs)      ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_DIM}stop      Dependency-aware stop                [Phase 5]${OPS_NC}
+  ${OPS_DIM}logs      Multiplexed logs stream              [Phase 5]${OPS_NC}
   ${OPS_DIM}update    Manifest self-healing update         [Phase 7]${OPS_NC}
   ${OPS_BOLD}env${OPS_NC}       show / doctor env context          ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}version${OPS_NC}   Print version
@@ -213,6 +218,10 @@ case "${COMMAND}" in
 
   stop)
     exec bash "${_MAIN_DIR}/commands/stop.sh" "$@"
+    ;;
+
+  status|ps)
+    exec bash "${_MAIN_DIR}/commands/status.sh" "$@"
     ;;
 
   logs)

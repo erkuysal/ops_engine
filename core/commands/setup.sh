@@ -10,6 +10,8 @@ source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
 source "${_SELF_DIR}/../lib/discovery.sh"
 source "${_SELF_DIR}/../lib/backup.sh"
+source "${_SELF_DIR}/../lib/setup_check.sh"
+source "${_SELF_DIR}/../lib/runner.sh"
 
 SUBCMD=""
 PROFILE=""
@@ -18,6 +20,7 @@ APPLY=false
 INTERACTIVE=false
 EXPORT_YAML=false
 CONFIRM_INFERRED=false
+JSON_OUTPUT=false
 MODULE=""
 EXPLICIT_SETUP_TARGET=false
 
@@ -37,7 +40,9 @@ Usage: ops setup
        ops setup export-yaml [--apply]
        ops setup import-yaml [--apply]
        ops setup show [--profile NAME]
+       ops setup check [--json]
        ops setup doctor [--profile NAME]
+       ops setup --check [--json]
 
 Setup modules:
   all           Default. Project base + discovery/config/services/dependencies.
@@ -90,7 +95,7 @@ if [[ $# -gt 0 ]]; then
       INTERACTIVE=true
       shift
       ;;
-    discover|apply-services|dependencies|export-yaml|import-yaml|show|doctor|help|--help|-h)
+    discover|apply-services|dependencies|export-yaml|import-yaml|show|check|doctor|help|--help|-h)
       EXPLICIT_SETUP_TARGET=true
       SUBCMD="$1"
       shift
@@ -105,6 +110,8 @@ for _arg in "$@"; do
     --interactive) INTERACTIVE=true ;;
     --export-yaml) EXPORT_YAML=true ;;
     --confirm-inferred) CONFIRM_INFERRED=true ;;
+    --check) EXPLICIT_SETUP_TARGET=true; SUBCMD="check" ;;
+    --json) JSON_OUTPUT=true ;;
     --all|-all) EXPLICIT_SETUP_TARGET=true; SUBCMD="generate" ;;
     --module=*) EXPLICIT_SETUP_TARGET=true; MODULE="${_arg#*=}" ;;
     --module)
@@ -877,18 +884,19 @@ _discovery_services_yaml() {
 
   jq -c '.directories[] | select(.service == true)' <<< "${discovery_json}" |
     while IFS= read -r entry; do
-      local id name stack path role
+      local id name stack path role env_files_yaml
       id="$(jq -r '.id' <<< "${entry}")"
       name="$(_discovery_human_name "${id}")"
       stack="$(jq -r '.stack' <<< "${entry}")"
       path="$(jq -r '.path' <<< "${entry}")"
       role="$(jq -r '.role' <<< "${entry}")"
+      env_files_yaml="$(jq -c '.env_files // []' <<< "${entry}")"
 
       printf '  - id: %s\n' "${id}"
       printf '    name: "%s"\n' "${name}"
       printf '    stack: %s\n' "${stack}"
       printf '    path: %s\n' "${path}"
-      printf '    env_files: []\n'
+      printf '    env_files: %s\n' "${env_files_yaml}"
       printf '    env_policy: dev_file\n'
       printf '    env_materialization: none\n'
       printf '    env_output_file: ""\n'
@@ -902,9 +910,12 @@ _discovery_services_yaml() {
       printf '    depends_on: []\n'
       printf '    healthcheck: ""\n'
 
-      if [[ "${role}" == "process_group" ]]; then
+      if [[ "${role}" == "process_group" || "${role}" == "docker_group" ]]; then
         printf '    runner:\n'
-        printf '      kind: process_group\n'
+        printf '      kind: %s\n' "$(runner_kind_for_role "${role}")"
+      fi
+
+      if [[ "${role}" == "process_group" ]]; then
         printf '    build:\n'
         printf '      output_dir: .ops.project/generated/bin/%s\n' "${id}"
         printf '      target_os: linux\n'
@@ -961,25 +972,27 @@ _discovery_start_command() {
   esac
 }
 
-_generate_setup_json_from_discovery() {
+_proposed_setup_json_from_discovery() {
   local discovery_json="$1"
   local services_json="{}"
 
   while IFS= read -r entry; do
     [[ -z "${entry}" ]] && continue
-    local id stack role cmd port service_entry
+    local id stack role cmd port env_files service_entry
     id="$(jq -r '.id' <<< "${entry}")"
     stack="$(jq -r '.stack' <<< "${entry}")"
     role="$(jq -r '.role' <<< "${entry}")"
     cmd="$(_discovery_start_command "${entry}")"
     port="$(_discovery_infer_port "${entry}")"
+    env_files="$(jq -c '.env_files // []' <<< "${entry}")"
 
     service_entry="$(jq -n \
       --arg runtime "" \
       --arg command "${cmd}" \
       --arg role "${role}" \
       --argjson port "${port}" \
-      '{runtime: $runtime, port: $port, command: $command, env_files: [], role: $role}')"
+      --argjson env_files "${env_files}" \
+      '{runtime: $runtime, port: $port, command: $command, env_files: $env_files, role: $role}')"
     if [[ "${stack}" == "django" ]]; then
       service_entry="$(jq '. + {django: {conda_env: ""}}' <<< "${service_entry}")"
     fi
@@ -991,15 +1004,20 @@ _generate_setup_json_from_discovery() {
       <<< "${services_json}")"
   done < <(jq -c '.directories[] | select(.service == true)' <<< "${discovery_json}")
 
-  local proposed_json
-  proposed_json="$(jq -n \
+  jq -n \
     --argjson services "${services_json}" \
     '{
       default_profile: "",
       scaffold: {type: "", package_manager: "", template: ""},
       runtimes: {python: {manager: "", env: "", fallbacks: []}},
       services: $services
-    }')"
+    }'
+}
+
+_generate_setup_json_from_discovery() {
+  local discovery_json="$1"
+  local proposed_json
+  proposed_json="$(_proposed_setup_json_from_discovery "${discovery_json}")"
 
   if manifest_exists; then
     local existing_json
@@ -1030,6 +1048,10 @@ _generate_setup_json_from_discovery() {
                      | ($existing.services[$id].port // 0) as $existing_port
                      | if ($existing_port | tonumber) > 0 then $existing_port else $proposed_port end
                    )
+                 | .env_files = (
+                     ($existing.services[$id].env_files // []) as $existing_env
+                     | if ($existing_env | length) > 0 then $existing_env else ($proposed.services[$id].env_files // []) end
+                   )
                ))
           )
       '
@@ -1040,13 +1062,14 @@ _generate_setup_json_from_discovery() {
 
 _generate_project_config_json_from_discovery() {
   local discovery_json="$1"
-  local project_name
+  local project_name global_env_files
 
   project_name="$(basename "${OPS_PROJECT_ROOT}")"
   if manifest_exists; then
     project_name="$(yq e '.project.name // ""' "${OPS_MANIFEST}" 2>/dev/null || true)"
     [[ -z "${project_name}" || "${project_name}" == "null" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
   fi
+  global_env_files="$(jq -c '.global_env_files // []' <<< "${discovery_json}")"
 
   jq -n \
     --arg version "1" \
@@ -1055,20 +1078,27 @@ _generate_project_config_json_from_discovery() {
     --arg root "${OPS_PROJECT_ROOT}" \
     --arg manifest ".ops.yaml" \
     --arg discovery ".ops.project/generated/discovery.json" \
+    --argjson global_env_files "${global_env_files}" \
     '{
       version: $version,
       generated_at: $generated_at,
       name: $name,
       root: $root,
       compatibility_manifest: $manifest,
-      discovery_cache: $discovery
+      discovery_cache: $discovery,
+      global_env_files: $global_env_files
     }'
 }
 
 _default_settings_json() {
   jq -n '{
     run: {default_mode: "foreground"},
-    start: {mode: "foreground", with_deps: true, preview: {enabled: true, lines: 20, wait_seconds: 1}}
+    start: {
+      mode: "foreground",
+      with_deps: true,
+      preview: {enabled: true, lines: 20, wait_seconds: 1},
+      healthcheck: {wait: true, timeout_seconds: 60, interval_seconds: 1}
+    }
   }'
 }
 
@@ -1105,12 +1135,31 @@ _generate_services_config_json_from_discovery() {
             role,
             confidence,
             evidence,
-            runner: (($existing_services[]? | select(.id == $directory.id) | .runner) // (if .role == "process_group" then {kind: "process_group"} else {kind: "stack"} end)),
+            runner: (($existing_services[]? | select(.id == $directory.id) | .runner) // (
+              if .role == "process_group" then {kind: "process_group"}
+              elif .role == "docker_group" then {kind: "compose"}
+              else {kind: "stack"}
+              end
+            )),
             build: (($existing_services[]? | select(.id == $directory.id) | .build) // (.build // {} | .outputs = ((.outputs // []) | map(select(.enabled != false) | {name, package})))),
             run: (($existing_services[]? | select(.id == $directory.id) | .run) // (if .role == "process_group" then {processes: ((.build.outputs // []) | map(select(.enabled != false) | {name}))} else {} end)),
             actions: (($existing_services[]? | select(.id == $directory.id) | .actions) // {}),
-            env_files: (($existing_services[]? | select(.id == $directory.id) | .env_files) // []),
-            env_policy: (($existing_services[]? | select(.id == $directory.id) | .env_policy) // ""),
+            compose_files: (
+              [($existing_services[]? | select(.id == $directory.id) | .compose_files)][0] as $existing
+              | if ($existing | type) == "array" and ($existing | length) > 0 then $existing
+                else ($directory.compose_files // [])
+                end
+            ),
+            env_files: (
+              [($existing_services[]? | select(.id == $directory.id) | .env_files)][0] as $existing
+              | if ($existing | type) == "array" and ($existing | length) > 0 then $existing
+                else ($directory.env_files // $setup.services[$directory.id].env_files // [])
+                end
+            ),
+            env_policy: (
+              ($existing_services[]? | select(.id == $directory.id) | .env_policy)
+              // "dev_file"
+            ),
             env_materialization: (($existing_services[]? | select(.id == $directory.id) | .env_materialization) // ""),
             env_output_file: (($existing_services[]? | select(.id == $directory.id) | .env_output_file) // ""),
             depends_on: (($decisions.decisions[]? | select(.type == "dependency" and .service == $directory.id) | .dependencies) // (($existing_services[]? | select(.id == $directory.id) | .depends_on) // [])),
@@ -1128,8 +1177,8 @@ _generate_services_config_json_from_discovery() {
             meta: {
               source: "setup_discovery",
               confirmed_by_user: (
-                (($decisions.decisions[]? | select(.type == "dependency" and .service == $directory.id and .confirmed == true)) != null)
-                or (($decisions.decisions[]? | select(.type == "process" and .service == $directory.id and .confirmed == true)) != null)
+                any($decisions.decisions[]?; .type == "dependency" and .service == $directory.id and .confirmed == true)
+                or any($decisions.decisions[]?; .type == "process" and .service == $directory.id and .confirmed == true)
               )
             }
           }
@@ -1178,11 +1227,12 @@ _materialize_project_config_from_discovery() {
 
 _generate_manifest_json_from_discovery() {
   local discovery_json="$1" setup_json="$2" profile_json="$3" decisions_json="${4:-}"
-  local project_name settings_json services_config
+  local project_name settings_json services_config global_env_files
 
   project_name="$(basename "${OPS_PROJECT_ROOT}")"
   settings_json="$(_default_settings_json)"
   services_config="$(_generate_services_config_json_from_discovery "${discovery_json}" "${setup_json}" "${decisions_json}")"
+  global_env_files="$(jq -c '.global_env_files // []' <<< "${discovery_json}")"
 
   jq -n \
     --arg project_name "${project_name}" \
@@ -1192,11 +1242,12 @@ _generate_manifest_json_from_discovery() {
     --argjson setup "${setup_json}" \
     --argjson profile_config "${profile_json}" \
     --argjson services_config "${services_config}" \
+    --argjson global_env_files "${global_env_files}" \
     '{
       version: "1",
       project: {
         name: $project_name,
-        global_env_files: [],
+        global_env_files: $global_env_files,
         defaults: {env_policy: "dev_file"}
       },
       services: ($services_config.services | map(
@@ -1205,6 +1256,7 @@ _generate_manifest_json_from_discovery() {
           name,
           stack,
           path,
+          compose_files: (.compose_files // []),
           env_files: (.env_files // []),
           env_policy: ((.env_policy // "") | if . == "" then "dev_file" else . end),
           env_materialization: ((.env_materialization // "") | if . == "" then "none" else . end),
@@ -1219,7 +1271,9 @@ _generate_manifest_json_from_discovery() {
             generated_at: $generated_at
           }
         }
-        + (if .runner.kind == "process_group" then {runner: .runner, build: .build, run: .run} else {} end)
+        + (if .runner.kind == "process_group" then {runner: .runner, build: .build, run: .run}
+           elif .runner.kind == "compose" then {runner: .runner}
+           else {} end)
       )),
       settings: $settings,
       setup: $setup,
@@ -1240,6 +1294,7 @@ _manifest_services_json_from_config() {
             name,
             stack,
             path,
+            compose_files: (.compose_files // []),
             env_files: (.env_files // []),
             env_policy: ((.env_policy // "") | if . == "" then "dev_file" else . end),
             env_materialization: ((.env_materialization // "") | if . == "" then "none" else . end),
@@ -1261,7 +1316,9 @@ _manifest_services_json_from_config() {
               generated_at: $generated_at
             }
           }
-          + (if .runner.kind == "process_group" then {runner: .runner, build: .build, run: .run} else {} end)
+          + (if .runner.kind == "process_group" then {runner: .runner, build: .build, run: .run}
+             elif .runner.kind == "compose" then {runner: .runner}
+             else {} end)
         )
     ' <<< "${services_config}"
 }
@@ -1295,6 +1352,20 @@ _print_discovery_preview() {
       printf '  %-14s %-34s %-15s %-16s %-11s conf=%s  [%s]\n' \
         "${id}" "${path}" "${stack}" "${role}" "${service}" "${confidence}" "${evidence}"
     done
+
+  printf '\nEnv Files\n'
+  jq -r '
+    .global_env_files // []
+    | if length > 0 then "  project: " + join(", ") else empty end
+  ' <<< "${discovery_json}"
+  jq -r '
+    .directories[]
+    | select((.env_files // []) | length > 0)
+    | "  \(.id): " + (.env_files | join(", "))
+  ' <<< "${discovery_json}"
+  if ! jq -e '((.global_env_files // []) | length > 0) or ([.directories[]? | select((.env_files // []) | length > 0)] | length > 0)' <<< "${discovery_json}" >/dev/null; then
+    printf '  none\n'
+  fi
 
   printf '\nService Candidates\n'
   jq -r '
@@ -1745,8 +1816,9 @@ _apply_generated() {
     _generate_profile_json "${PROFILE}" > "${profile_tmp}"
   fi
 
-  decisions_tmp="$(_decisions_mark_confirmed_on_apply "$(cat "${decisions_tmp}")")"
-  printf '%s\n' "${decisions_tmp}" > "${decisions_tmp}.confirmed"
+  local decisions_content
+  decisions_content="$(_decisions_mark_confirmed_on_apply "$(cat "${decisions_tmp}")")"
+  printf '%s\n' "${decisions_content}" > "${decisions_tmp}.confirmed"
   mv "${decisions_tmp}.confirmed" "${decisions_tmp}"
 
   [[ "${EXPORT_YAML}" == "true" && -f "${OPS_MANIFEST}" ]] && _backup_file "${OPS_MANIFEST}"
@@ -1873,6 +1945,31 @@ _doctor_setup() {
   return "${fail}"
 }
 
+_run_setup_check() {
+  require_bins jq
+  local discovery_json decisions_json proposed_setup_json current_json cached_json report_json exit_code=0
+
+  discovery_json="$(discovery_scan_project_json)"
+  decisions_json="$(_resolve_setup_decisions_json "${discovery_json}")"
+  discovery_json="$(_apply_discovery_decisions_json "${discovery_json}" "${decisions_json}")"
+  proposed_setup_json="$(_proposed_setup_json_from_discovery "${discovery_json}")"
+  current_json="$(setup_check_load_current_json)"
+  cached_json='{}'
+  if [[ -f "${OPS_DISCOVERY_FILE:-}" ]]; then
+    cached_json="$(cat "${OPS_DISCOVERY_FILE}")"
+  fi
+  report_json="$(setup_check_build_report_json "${discovery_json}" "${proposed_setup_json}" "${current_json}" "${cached_json}")"
+
+  if [[ "${JSON_OUTPUT}" == "true" ]]; then
+    jq '.' <<< "${report_json}"
+    setup_check_has_drift "${report_json}" && exit_code=1
+    exit "${exit_code}"
+  fi
+
+  setup_check_print_report "${report_json}" || exit_code=1
+  exit "${exit_code}"
+}
+
 case "${SUBCMD}" in
   wizard)
     _run_setup_wizard
@@ -1903,6 +2000,9 @@ case "${SUBCMD}" in
     ;;
   doctor)
     _doctor_setup
+    ;;
+  check)
+    _run_setup_check
     ;;
   generate)
     ops_section "ops setup"

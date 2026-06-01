@@ -23,6 +23,7 @@ Project facts belong in `.ops.project/` or `.ops.yaml` (transitional). Details: 
 | `core/probes/` | Discovery fingerprint scripts |
 | `schemas/` | JSON Schema for config shapes |
 | `templates/` | Default JSON templates |
+| `tests/` | Smoke tests and stack fixtures |
 | `docs/` | Contributor documentation (module docs) |
 
 ## Prerequisites
@@ -34,10 +35,11 @@ Project facts belong in `.ops.project/` or `.ops.yaml` (transitional). Details: 
 ## Development workflow
 
 1. Clone or work in the `.ops` repository.
-2. Test from the parent project root: `./ops.sh <command>`.
-3. Use `OPS_DEBUG=true` and `--dry-run` before `--apply`.
-4. Update docs under `docs/` for any behavior you change.
-5. Run smoke checks from [docs/development.md](docs/development.md).
+2. Run package smoke tests: `bash tests/run.sh`.
+3. Test from a consuming repo when needed: `./ops.sh <command>`.
+4. Use `OPS_DEBUG=true` and `--dry-run` before `--apply`.
+5. Update docs under `docs/` for any behavior you change.
+6. Run smoke checks from [docs/development.md](docs/development.md).
 
 ## Where to change what
 

@@ -21,6 +21,8 @@ Compose-based services: up/down/logs/status via `docker compose`.
 | logs | `docker compose logs -f` |
 | status | `docker compose ps --services --filter status=running` |
 
+If `compose_files` is present on a docker service, each command uses `docker compose -f ...` with those files.
+
 ## See also
 
 - [../probes/docker.md](../probes/docker.md)

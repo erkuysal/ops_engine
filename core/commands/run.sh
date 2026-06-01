@@ -18,6 +18,7 @@ source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/settings.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
 source "${_SELF_DIR}/../lib/run_plan.sh"
+source "${_SELF_DIR}/../lib/runner.sh"
 source "${_SELF_DIR}/../lib/env.sh"
 source "${_SELF_DIR}/../lib/env_materialize.sh"
 source "${_SELF_DIR}/../lib/preflight.sh"
@@ -481,17 +482,17 @@ STACK_FILE="${OPS_CORE_ROOT}/stacks/${STACK}.sh"
 # 4. Stack strategy: .ops/core/stacks/<stack>.sh (fallback)
 # 5. Explicit command: .ops.yaml manifest (least priority)
 
-if [[ "${RUNNER_KIND}" != "process_group" && -f "${SVC_OVERRIDE}" && -x "${SVC_OVERRIDE}" ]]; then
+if ! runner_is_managed_kind "${RUNNER_KIND}" && [[ -f "${SVC_OVERRIDE}" && -x "${SVC_OVERRIDE}" ]]; then
   ops_info "Running local override: .ops/commands/${SVC_ID}/${ACTION}.sh"
   _run_isolated "cd '${ABS_PATH}' && '${SVC_OVERRIDE}'"
   EXIT_CODE=$?
   if [[ $EXIT_CODE -ne 0 ]]; then exit $EXIT_CODE; else exit 0; fi
-elif [[ "${RUNNER_KIND}" != "process_group" && -f "${GLOBAL_OVERRIDE}" && -x "${GLOBAL_OVERRIDE}" ]]; then
+elif ! runner_is_managed_kind "${RUNNER_KIND}" && [[ -f "${GLOBAL_OVERRIDE}" && -x "${GLOBAL_OVERRIDE}" ]]; then
   ops_info "Running global override: .ops/commands/${ACTION}.sh"
   _run_isolated "cd '${ABS_PATH}' && '${GLOBAL_OVERRIDE}'"
   EXIT_CODE=$?
   if [[ $EXIT_CODE -ne 0 ]]; then exit $EXIT_CODE; else exit 0; fi
-elif [[ "${RUNNER_KIND}" != "process_group" && "${ACTION}" == "start" && -n "${SETUP_CMD}" && "${SETUP_CMD}" != "null" ]]; then
+elif ! runner_is_managed_kind "${RUNNER_KIND}" && [[ "${ACTION}" == "start" && -n "${SETUP_CMD}" && "${SETUP_CMD}" != "null" ]]; then
   ops_info "Running setup command: .ops.project generated setup for ${SVC_ID}"
   _run_isolated "cd '${ABS_PATH}' && ${SETUP_CMD}"
   EXIT_CODE=$?

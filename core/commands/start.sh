@@ -19,6 +19,7 @@ source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/settings.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
 source "${_SELF_DIR}/../lib/graph.sh"
+source "${_SELF_DIR}/../lib/healthcheck.sh"
 
 START_INTERRUPTED=false
 
@@ -107,14 +108,35 @@ _persist_django_conda_env() {
   yq e -o=json -I=2 '.setup' "${OPS_MANIFEST}" > "${OPS_PROJECT_SETUP_GENERATED_FILE}"
 }
 
+_wait_for_service_health() {
+  local svc="$1"
+  local url=""
+
+  [[ "${WAIT_FOR_HEALTH}" == "true" ]] || return 0
+
+  url="$(healthcheck_service_url "${svc}" 2>/dev/null || true)"
+  [[ -n "${url}" ]] || return 0
+
+  ops_info "[${svc}] Waiting for healthcheck: ${url}"
+  if healthcheck_wait_service "${svc}"; then
+    ops_ok "[${svc}] Healthcheck passed"
+    return 0
+  fi
+
+  ops_error "[${svc}] Healthcheck timed out: ${url}"
+  return 1
+}
+
 # ── Parse arguments ──────────────────────────────────────────────────────────
 TARGET=""
 WITH_DEPS="$(ops_setting_bool '.start.with_deps' 'true')"
 START_MODE="$(ops_setting_mode '.start.mode' 'background')"
+WAIT_FOR_HEALTH="$(ops_setting_bool '.start.healthcheck.wait' 'true')"
 DRY_RUN=false
+NO_WAIT=false
 
 _usage_start() {
-  printf 'Usage: ops start [<service_id> | --all] [--with-deps | --no-deps] [--foreground | --background] [--dry-run]\n'
+  printf 'Usage: ops start [<service_id> | --all] [--with-deps | --no-deps] [--foreground | --background] [--no-wait] [--dry-run]\n'
 }
 
 for _arg in "$@"; do
@@ -133,6 +155,7 @@ for _arg in "$@"; do
     --background) START_MODE="background" ;;
     --mode=*)    START_MODE="${_arg#*=}" ;;
     --dry-run)   DRY_RUN=true ;;
+    --no-wait)   NO_WAIT=true ;;
     -*)          die "Unknown flag: ${_arg}" ;;
     *)
       if [[ -z "${TARGET}" ]]; then
@@ -152,6 +175,8 @@ case "${START_MODE}" in
   foreground|background) ;;
   *) die "Invalid start mode '${START_MODE}' (expected foreground or background)" 2 ;;
 esac
+
+[[ "${NO_WAIT}" == "true" ]] && WAIT_FOR_HEALTH=false
 
 require_manifest_or_config
 
@@ -261,6 +286,9 @@ for SVC in "${EXEC_LIST[@]+"${EXEC_LIST[@]}"}"; do
         ops_error "Failed to start '${SVC}'"
         exit 5
       fi
+    fi
+    if ! _wait_for_service_health "${SVC}"; then
+      exit 5
     fi
   fi
 done

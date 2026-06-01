@@ -79,8 +79,9 @@ ops_section "ops experimental logs"
 
 for SVC in "${EXEC_LIST[@]+"${EXEC_LIST[@]}"}"; do
   STACK="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC}\") | .stack")"
-  
-  if [[ "${STACK}" == "docker" ]]; then
+  RUNNER_KIND="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC}\") | .runner.kind")"
+
+  if [[ "${RUNNER_KIND}" == "compose" || "${STACK}" == "docker" ]]; then
     SVC_PATH="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC}\") | .path")"
     ABS_PATH="${OPS_PROJECT_ROOT}/${SVC_PATH}"
     

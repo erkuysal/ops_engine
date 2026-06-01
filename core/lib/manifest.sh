@@ -170,7 +170,11 @@ manifest_get_service_field() {
         getpath($path | split(".") | map(if test("^[0-9]+$") then tonumber else . end));
       (.services[]? | select(.id == $id) | getpathstr($field)) // ""
     ' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true)"
-    [[ -n "${value}" && "${value}" != "null" ]] && { printf '%s' "${value}"; return 0; }
+    if jq -e --arg id "${id}" '.services[]? | select(.id == $id)' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" >/dev/null 2>&1; then
+      [[ "${value}" == "null" ]] && value=""
+      printf '%s' "${value}"
+      return 0
+    fi
   fi
   require_manifest
   _manifest_yq_or_empty ".services[] | select(.id == \"${id}\") | .${field}"

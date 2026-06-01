@@ -200,6 +200,13 @@ The immediate goal is:
 
 ## Recently Completed (implementation slices)
 
+- **Tests + CI:** `tests/run.sh`, stack fixtures under `tests/fixtures/`, smoke suites, GitHub Actions workflow (`.github/workflows/ci.yml`).
+- **`ops status` / `ops ps`:** runtime status from PID files, ports, healthchecks, `--json` output (`core/lib/status.sh`, `core/commands/status.sh`).
+- **Env file discovery:** `core/lib/env_discovery.sh` scans `.env*` files into `discovery.json`, `services.json`, and `project.json` `global_env_files`.
+- **`ops setup check`:** read-only drift detection (discovery vs config), `--json` report (`core/lib/setup_check.sh`, `core/lib/setup_check.jq`).
+- **Healthcheck-aware start:** post-start HTTP wait via `core/lib/healthcheck.sh`; `--no-wait` opt-out; settings `start.healthcheck.*`.
+- **Docker compose stack:** discovery captures compose files, `docker_group` services keep `compose_files`, docker runner/status use `docker compose -f ...`.
+- **Unified runner profiles:** `core/lib/runner.sh` maps roles to `runner.kind` (`stack`, `process_group`, `compose`); managed runners skip overrides in run/show/setup.
 - **Slice A — Config sync:** `manifest_sync.sh`, export/import-yaml, config-first validate
 - **Slice B — Cross-shell:** `run_cross_shell_binary`, Go/Node stack integration
 - **Slice C — Setup inference:** port inference, Vite proxy dependency inference, setup port merge fix

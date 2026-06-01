@@ -5,6 +5,9 @@ set -euo pipefail
 if [[ "${_OPS_CORE_RUN_PLAN_LOADED:-}" == "1" ]]; then return 0; fi
 _OPS_CORE_RUN_PLAN_LOADED=1
 
+# shellcheck source=runner.sh
+source "${OPS_CORE_ROOT}/lib/runner.sh"
+
 OPS_RUN_PLANS_DIR="${OPS_RUN_PLANS_DIR:-${OPS_PROJECT_GENERATED_DIR:-${OPS_PROJECT_ROOT}/.ops.project/generated}/run-plans}"
 export OPS_RUN_PLANS_DIR
 
@@ -164,7 +167,7 @@ run_plan_generate_json() {
   selected_cmd=""
   selected_strategy=""
   selected_cwd="${abs_path}"
-  if [[ "${runner_kind}" == "process_group" ]]; then
+  if runner_is_managed_kind "${runner_kind}"; then
     selected_kind="managed stack runner"
     selected_cmd="${stack_dispatch_func} ${action}"
     selected_strategy="stack"

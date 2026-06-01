@@ -22,7 +22,7 @@ Resolve how an action runs for a service, emit JSON run plans, and write artifac
 
 Implemented in `run_plan_generate_json` (highest wins):
 
-1. `runner.kind: process_group` → stack dispatcher
+1. `runner.kind: process_group` or `compose` → stack dispatcher (managed; overrides skipped)
 2. Service override `.ops/commands/<id>/<action>.sh` (executable)
 3. Global override `.ops/commands/<action>.sh` (executable)
 4. Setup start command (start only)

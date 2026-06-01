@@ -10,6 +10,11 @@
       "enabled": true,
       "lines": 20,
       "wait_seconds": 1
+    },
+    "healthcheck": {
+      "wait": true,
+      "timeout_seconds": 60,
+      "interval_seconds": 1
     }
   }
 }

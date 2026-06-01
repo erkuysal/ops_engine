@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [root, main]
+  pull_request:
+    branches: [root, main]
+
+jobs:
+  smoke:
+    name: Smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+          jq --version
+
+      - name: Run smoke tests
+        run: bash tests/run.sh
+
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint core scripts
+        run: |
+          find core -name '*.sh' -print0 | xargs -0 shellcheck -e SC1091,SC2034,SC2154

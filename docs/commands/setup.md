@@ -11,7 +11,8 @@ ops setup
 ops setup all [--apply]
 ops setup project|services|dependencies|ci [--apply]
 ops setup export-yaml|import-yaml [--apply]
-ops setup discover|apply-services|show|doctor
+ops setup discover|apply-services|show|check|doctor
+ops setup --check [--json]
 ops setup --module=NAME [--apply]
 ops setup --dry-run|--interactive|--apply
 ```

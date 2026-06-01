@@ -23,6 +23,14 @@
             "lines": { "type": "integer", "minimum": 0 },
             "wait_seconds": { "type": "integer", "minimum": 0 }
           }
+        },
+        "healthcheck": {
+          "type": "object",
+          "properties": {
+            "wait": { "type": "boolean" },
+            "timeout_seconds": { "type": "integer", "minimum": 1 },
+            "interval_seconds": { "type": "integer", "minimum": 1 }
+          }
         }
       }
     }

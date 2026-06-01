@@ -36,10 +36,26 @@ Alternatively, after `ops install`, use global `ops` from any directory that con
 ## Safe change workflow
 
 1. Edit package code under `.ops/core/`.
-2. Preview mutating commands with `--dry-run` before `--apply`.
-3. Run targeted smoke checks (below).
-4. Update the matching file under `docs/` for your change.
-5. Note significant behavior changes in `ONGOING.md` if applicable.
+2. Run package smoke tests: `bash tests/run.sh` (from the `.ops` repo root).
+3. Preview mutating commands with `--dry-run` before `--apply`.
+4. Run targeted integration smoke checks (below) when changing runtime behavior.
+5. Update the matching file under `docs/` for your change.
+6. Note significant behavior changes in `ONGOING.md` if applicable.
+
+## Automated tests
+
+From the `.ops` repository root:
+
+```bash
+bash tests/run.sh
+```
+
+Fixtures under `tests/fixtures/` are minimal fake projects (Go process group, Node
+workspace, config-only validate). CI runs the same suite on Ubuntu via
+`.github/workflows/ci.yml`.
+
+When adding discovery or setup behavior, extend fixtures and smoke suites under
+`tests/smoke/` rather than relying only on a consuming monorepo.
 
 ## Smoke checks
 

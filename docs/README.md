@@ -31,6 +31,7 @@ Contributor and implementation docs for the `.ops` package. For day-to-day usage
 | [commands/show.md](commands/show.md) | `core/commands/show.sh` |
 | [commands/start.md](commands/start.md) | `core/commands/start.sh` |
 | [commands/stop.md](commands/stop.md) | `core/commands/stop.sh` |
+| [commands/status.md](commands/status.md) | `core/commands/status.sh` |
 | [commands/logs.md](commands/logs.md) | `core/commands/logs.sh` |
 | [commands/ci.md](commands/ci.md) | `core/commands/ci.sh` |
 | [commands/validate.md](commands/validate.md) | `core/commands/validate.sh` |

@@ -7,12 +7,36 @@ _OPS_CORE_DISCOVERY_LOADED=1
 
 # shellcheck source=detect.sh
 source "${OPS_CORE_ROOT}/lib/detect.sh"
+# shellcheck source=env_discovery.sh
+source "${OPS_CORE_ROOT}/lib/env_discovery.sh"
 
 OPS_DISCOVERY_FILE="${OPS_PROJECT_GENERATED_DIR:-${OPS_PROJECT_ROOT}/.ops.project/generated}/discovery.json"
 export OPS_DISCOVERY_FILE
 
 _discovery_json_string_array() {
   jq -Rn --arg raw "${1:-}" '$raw | split("\n") | map(select(length > 0))'
+}
+
+_discovery_docker_compose_files_json() {
+  local rel_path="$1" abs_path="$2"
+  local files_json='[]'
+  local file rel
+  local candidates=(
+    compose.yml
+    compose.yaml
+    docker-compose.yml
+    docker-compose.yaml
+    docker-compose.override.yml
+    docker-compose.override.yaml
+  )
+
+  for file in "${candidates[@]}"; do
+    [[ -f "${abs_path}/${file}" ]] || continue
+    rel="${rel_path}/${file}"
+    files_json="$(jq --arg file "${rel}" '. + [$file]' <<< "${files_json}")"
+  done
+
+  printf '%s' "${files_json}"
 }
 
 _discovery_node_json() {
@@ -168,14 +192,24 @@ _discovery_go_json() {
 }
 
 _discovery_generic_json() {
-  local rel_path="$1" stack="$2" score="$3"
+  local rel_path="$1" abs_path="$2" stack="$3" score="$4"
   local role="app" service=true confidence="0.70"
   local evidence=("${stack} probe")
+  local compose_files='[]'
 
   case "${stack}" in
     django) role="api"; confidence="0.88"; evidence=("manage.py") ;;
     elixir-phoenix) role="api"; confidence="0.86"; evidence=("mix.exs" "phoenix config") ;;
-    docker) role="docker_group"; confidence="0.75"; evidence=("docker files") ;;
+    docker)
+      role="docker_group"
+      confidence="0.75"
+      compose_files="$(_discovery_docker_compose_files_json "${rel_path}" "${abs_path}")"
+      if [[ "$(jq 'length' <<< "${compose_files}")" -gt 0 ]]; then
+        evidence=("docker compose")
+      else
+        evidence=("docker files")
+      fi
+      ;;
   esac
 
   jq -n \
@@ -185,6 +219,7 @@ _discovery_generic_json() {
     --argjson service "${service}" \
     --argjson score "${score}" \
     --arg confidence "${confidence}" \
+    --argjson compose_files "${compose_files}" \
     --argjson evidence "$(_discovery_json_string_array "$(printf '%s\n' "${evidence[@]}")")" \
     '{
       path: $path,
@@ -193,6 +228,7 @@ _discovery_generic_json() {
       service: $service,
       confidence: ($confidence | tonumber),
       score: $score,
+      compose_files: (if $stack == "docker" then $compose_files else [] end),
       evidence: $evidence
     }'
 }
@@ -209,19 +245,22 @@ discovery_scan_project_json() {
     case "${stack}" in
       node) entry_json="$(_discovery_node_json "${rel_path}" "${abs_path}" "${score}")" ;;
       go) entry_json="$(_discovery_go_json "${rel_path}" "${abs_path}" "${score}")" ;;
-      *) entry_json="$(_discovery_generic_json "${rel_path}" "${stack}" "${score}")" ;;
+      *) entry_json="$(_discovery_generic_json "${rel_path}" "${abs_path}" "${stack}" "${score}")" ;;
     esac
+    entry_json="$(env_discovery_attach_to_entry_json "${entry_json}" "${rel_path}")"
     entries_json="$(jq --arg id "${id}" --argjson entry "${entry_json}" '. + [$entry + {id: $id}]' <<< "${entries_json}")"
   done < <(detect_scan_project)
 
   jq -n \
     --arg generated_at "$(ops_timestamp)" \
     --arg root "${OPS_PROJECT_ROOT}" \
+    --argjson global_env_files "$(env_discovery_global_files_json)" \
     --argjson directories "${entries_json}" \
     '{
       version: 1,
       generated_at: $generated_at,
       project_root: $root,
+      global_env_files: $global_env_files,
       directories: $directories
     }'
 }

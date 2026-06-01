@@ -5,6 +5,9 @@ set -euo pipefail
 if [[ "${_OPS_CORE_SETUP_LOADED:-}" == "1" ]]; then return 0; fi
 _OPS_CORE_SETUP_LOADED=1
 
+# shellcheck source=runner.sh
+source "${OPS_CORE_ROOT}/lib/runner.sh"
+
 OPS_SETUP_FILE="${OPS_MANIFEST}"
 OPS_PROJECT_STATE_DIR="${OPS_PROJECT_ROOT}/.ops.project"
 OPS_PROJECT_LOG_DIR="${OPS_PROJECT_STATE_DIR}/logs"
@@ -146,7 +149,7 @@ setup_service_start_command() {
   else
     runner_kind="$(yq e ".services[] | select(.id == \"${service_id}\") | .runner.kind // \"\"" "${OPS_MANIFEST}" 2>/dev/null || true)"
   fi
-  if [[ "${runner_kind}" == "process_group" ]]; then
+  if runner_is_managed_kind "${runner_kind}"; then
     printf ''
     return 0
   fi

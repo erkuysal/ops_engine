@@ -12,6 +12,7 @@ source "${_SELF_DIR}/../lib/setup.sh"
 source "${_SELF_DIR}/../lib/env.sh"
 source "${_SELF_DIR}/../lib/cross_shell.sh"
 source "${_SELF_DIR}/../lib/run_plan.sh"
+source "${_SELF_DIR}/../lib/runner.sh"
 
 _usage_show() {
   cat <<'EOF'
@@ -239,8 +240,8 @@ printf '  setup profile: %s\n' "${SETUP_PROFILE}"
 printf '  run plan: %s\n' "${RUN_PLAN_FILE#${OPS_PROJECT_ROOT}/}"
 
 printf '\nResolution\n'
-if [[ "${RUNNER_KIND}" == "process_group" ]]; then
-  printf '  managed runner: process_group (service/global overrides and setup command are skipped)\n'
+if runner_is_managed_kind "${RUNNER_KIND}"; then
+  printf '  managed runner: %s (service/global overrides and setup command are skipped)\n' "${RUNNER_KIND}"
 fi
 printf '  1. service override: .ops/commands/%s/%s.sh (exists: %s, executable: %s)\n' \
   "${SVC_ID}" "${ACTION}" "$(_bool_file "${SVC_OVERRIDE}")" "$(_bool_exec "${SVC_OVERRIDE}")"
@@ -253,7 +254,7 @@ printf '  5. manifest action: %s\n' "${EXPLICIT_CMD:-<empty>}"
 
 SELECTED_KIND=""
 SELECTED_CMD=""
-if [[ "${RUNNER_KIND}" == "process_group" ]]; then
+if runner_is_managed_kind "${RUNNER_KIND}"; then
   SELECTED_KIND="managed stack runner"
   SELECTED_CMD="${STACK_DISPATCH_FUNC} ${ACTION}"
 elif [[ -f "${SVC_OVERRIDE}" && -x "${SVC_OVERRIDE}" ]]; then

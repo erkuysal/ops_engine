@@ -12,7 +12,7 @@ How `ops run` and `ops show` choose a runner for `<action>` on `<service_id>`.
 
 | Order | Strategy | Condition |
 | --- | --- | --- |
-| 1 | `stack` (process_group) | `runner.kind == process_group` |
+| 1 | `stack` (managed) | `runner.kind` is `process_group` or `compose` |
 | 2 | `service_override` | `.ops/commands/<service_id>/<action>.sh` executable |
 | 3 | `global_override` | `.ops/commands/<action>.sh` executable |
 | 4 | `setup_command` | `start` and setup has start command |

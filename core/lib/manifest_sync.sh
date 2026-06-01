@@ -63,6 +63,7 @@ manifest_json_from_project_config() {
             name,
             stack,
             path,
+            compose_files: (.compose_files // []),
             env_files: (.env_files // []),
             env_policy: ((.env_policy // "") | if . == "" then "dev_file" else . end),
             env_materialization: ((.env_materialization // "") | if . == "" then "none" else . end),
@@ -72,7 +73,9 @@ manifest_json_from_project_config() {
             healthcheck: (.healthcheck // ""),
             meta: (.meta // {})
           }
-          + (if (.runner.kind? // "") == "process_group" then {runner: .runner, build: .build, run: .run} else {} end)
+          + (if (.runner.kind? // "") == "process_group" then {runner: .runner, build: .build, run: .run}
+             elif (.runner.kind? // "") == "compose" then {runner: .runner}
+             else {} end)
         ],
         settings: $settings,
         setup: $setup,
