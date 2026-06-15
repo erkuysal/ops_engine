@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Backup files before mutating setup outputs (`.ops.project/.history/`).
+Manifest backup helpers used by YAML sync paths.
 
 ## Source files
 
@@ -10,12 +10,17 @@ Backup files before mutating setup outputs (`.ops.project/.history/`).
 
 ## Key functions
 
-`_backup_file` in setup.sh delegates here for config/manifest writes.
+- `ops_backup_manifest`
+- `ops_backup_list`
+- `ops_backup_restore`
 
 ## Inputs and outputs
 
-**Writes:** timestamped copies under `.ops.project/.history/`
+**Writes:** timestamped manifest copies under `.ops.project/.history/`
+
+Config snapshots are handled by the `backup` command.
 
 ## See also
 
 - [../commands/setup.md](../commands/setup.md)
+- [../commands/backup.md](../commands/backup.md)

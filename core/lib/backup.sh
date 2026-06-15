@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # .ops-core/lib/backup.sh — Non-destructive .ops.yaml snapshot and rollback helper.
 #
-# Backs up .ops.yaml to .ops/.history/<timestamp>.yaml before any mutating write.
+# Backs up .ops.yaml to .ops.project/.history/<timestamp>.yaml before any mutating write.
 # Provides rollback listing and restore commands.
 #
 # Usage (from other ops-core scripts):
@@ -16,13 +16,13 @@ set -euo pipefail
 if [[ "${_OPS_CORE_BACKUP_LOADED:-}" == "1" ]]; then return 0; fi
 _OPS_CORE_BACKUP_LOADED=1
 
-# Requires init.sh to be sourced first (provides OPS_MANIFEST, OPS_LOCAL_DIR, die, warn, info, ok, ops_timestamp)
-_BACKUP_HISTORY_DIR="${OPS_LOCAL_DIR}/.history"
+# Requires init.sh to be sourced first (provides OPS_MANIFEST, OPS_PROJECT_HISTORY_DIR, die, warn, info, ok, ops_timestamp)
+_BACKUP_HISTORY_DIR="${OPS_PROJECT_HISTORY_DIR:-${OPS_PROJECT_ROOT}/.ops.project/.history}"
 _BACKUP_MAX_ENTRIES=50  # keep at most N backups; prune oldest when exceeded
 
 # ============================================================================
 # ops_backup_manifest
-# Creates a timestamped copy of .ops.yaml in .ops/.history/ before any write.
+# Creates a timestamped copy of .ops.yaml in .ops.project/.history/ before any write.
 # Prints the backup path on success.
 # ============================================================================
 ops_backup_manifest() {
