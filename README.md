@@ -34,7 +34,7 @@ Ops currently supports:
 - discovery-backed service config for Django, Go, Node, and Phoenix-style apps
 - process-group support for Go services with multiple `cmd/*` binaries
 - config-first runtime reads from `.ops.project/config`, with `.ops.yaml`
-  fallback during migration
+  available only as an explicit compatibility import/export format
 - real-time foreground log streaming for service starts
 - background service logs and PID files under `.ops.project`
 - run-plan inspection before execution
@@ -42,12 +42,13 @@ Ops currently supports:
 - local-first CI/server metadata and secrets setup
 - focused credential checks for Docker, SSH deploy, and optional GitHub bridge
 - simple SSH server connection checks from local config/env
+- native basic container build/push and remote compose deploy commands
 - optional GitHub Actions secret guidance
 - WSL/Windows binary path support for cross-OS execution
 
-The system is usable, but still evolving. `.ops.yaml` is still present as a
-compatibility and human-editable layer. The long-term target is to move more
-confirmed project facts into `.ops.project/config`.
+The system is usable, but still evolving. `.ops.project/config` is the primary
+project state. `.ops.yaml` is optional compatibility I/O for projects or tools
+that still need a YAML representation.
 
 ## Boundaries
 
@@ -55,7 +56,7 @@ confirmed project facts into `.ops.project/config`.
 | --- | --- | --- |
 | `.ops/` | ops package | Commands, libraries, stack strategies, probes, schemas, docs |
 | `.ops.project/` | project-local generated state | Config, discovery cache, run plans, logs, PID files, backups, secrets |
-| `.ops.yaml` | migration/project layer | Transitional manifest, service declarations, settings, setup, profiles |
+| `.ops.yaml` | optional compatibility file | Explicit export/import representation of project config |
 | `ops.sh` | repo entrypoint | Runs the local `.ops` package from this repository |
 
 Do not put project-specific values into package files under `.ops/`.
@@ -104,6 +105,7 @@ Setup can also run individual modules:
 ops setup project --apply
 ops setup services --apply
 ops setup dependencies --interactive --apply
+ops setup run-plans --apply
 ops setup ci --interactive --apply
 ```
 
@@ -112,6 +114,7 @@ Module roles:
 - `project`: creates the base `.ops.project` structure
 - `services`: discovers service candidates and applies runtime service config
 - `dependencies`: previews or interviews service dependency decisions
+- `run-plans`: regenerates run-plan JSON artifacts from current config
 - `ci`: creates local CI/server config and local secrets template
 - `all`: full discovery/config/services/dependencies setup path
 
@@ -163,8 +166,9 @@ secrets, logs, and run state.
 
 ## Configuration Direction
 
-Current runtime reads prefer `.ops.project/config` and fall back to `.ops.yaml`
-where needed.
+Runtime reads prefer `.ops.project/config`. `.ops.yaml` is read only as a
+compatibility fallback when project config has not been materialized yet, or by
+explicit import/export commands.
 
 The desired direction is:
 
@@ -172,7 +176,7 @@ The desired direction is:
 2. Setup resolves uncertain values through defaults or interactive prompts.
 3. Confirmed decisions are stored in `.ops.project/config`.
 4. Runtime commands read project config and generated run plans.
-5. `.ops.yaml` becomes optional or a compatibility/export layer.
+5. `.ops.yaml` remains optional compatibility import/export.
 
 This lets `.ops/` stay package-owned and reusable across projects.
 
@@ -184,14 +188,14 @@ This lets `.ops/` stay package-owned and reusable across projects.
 ops validate --plain
 ```
 
-Validation checks manifest syntax, required sections, service IDs, stacks,
-dependencies, filesystem paths, env file references, overrides, settings,
-setup, and profiles.
+Validation checks project config directly when `.ops.project/config` exists.
+If only `.ops.yaml` exists, validation uses it as the compatibility source.
 
 ### Doctor
 
 ```bash
 ops doctor
+ops doctor boundaries
 ops install doctor
 ops setup doctor --profile=local
 ops ci doctor
@@ -204,7 +208,7 @@ file references.
 ### Show
 
 ```bash
-ops show start userengine
+ops show start <service_id>
 ```
 
 Show prints the execution plan before running it, including the config source,
@@ -214,12 +218,12 @@ outputs, process groups, env context, logs, and PID paths.
 ### Start, Stop, Logs
 
 ```bash
-ops start userengine
-ops start userengine --dry-run
-ops start userengine --background
-ops stop userengine
-ops logs userengine
-ops logs userengine --follow
+ops start <service_id>
+ops start <service_id> --dry-run
+ops start <service_id> --background
+ops stop <service_id>
+ops logs <service_id>
+ops logs <service_id> --follow
 ```
 
 Foreground starts stream service output in real time. Background starts write
@@ -294,7 +298,7 @@ For `ops run <action> <service>`, ops resolves behavior through:
 3. global command overrides under `.ops/commands/`
 4. setup-derived service commands
 5. stack strategies under `.ops/core/stacks/`
-6. explicit manifest actions
+6. explicit configured actions
 7. legacy bridge behavior where still needed
 
 Use `ops show <action> <service>` whenever behavior is unclear.
@@ -342,17 +346,33 @@ ops setup services
 ops setup dependencies
 ops setup ci
 ops ci doctor
+ops cleanup
+ops backup create --label before-change
+ops backup list
+ops backup prune --keep 20
+ops package status
+ops monitor status
+ops monitor test --strict
+ops monitor credentials
+ops monitor setup --postgres --redis --apply
+ops monitor postgres info
+ops monitor postgres databases
+ops monitor postgres users
+ops build backend --dry-run
+ops deploy backend --dry-run
+ops build --service <service_id> --dry-run
+ops deploy --service <service_id> --dry-run
 ops validate --plain
-ops show start userengine
-ops start userengine --dry-run
+ops show start <service_id>
+ops start <service_id> --dry-run
 ```
 
 ## Roadmap
 
 Near-term direction:
 
-- make `.ops.project/config` the primary source for all project facts (export-yaml/import-yaml available; validate supports config-only)
-- reduce `.ops.yaml` to optional export/import or compatibility
+- continue hardening `.ops.project/config` as the primary source for project facts
+- keep `.ops.yaml` limited to optional export/import compatibility
 - improve the guided setup wizard with better module summaries
 - improve dependency graph interviews and persistence
 - expand CI/server setup around SSH deploy workflows

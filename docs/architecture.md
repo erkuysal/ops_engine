@@ -44,7 +44,7 @@ flowchart LR
 ```
 
 1. **Discovery** — scans workspace; writes `discovery.json`.
-2. **Setup** — resolves ambiguity; writes `config/*.json` and may update `.ops.yaml`.
+2. **Setup** — resolves ambiguity; writes `config/*.json`.
 3. **Run plan** — `run_plan_generate_json` builds `generated/run-plans/<service>.<action>.json`.
 4. **Execution** — `run.sh` / `start.sh` dispatch to stack strategies or overrides.
 
@@ -63,9 +63,12 @@ flowchart LR
   docs/               # This documentation tree
 ```
 
-## Config sources (migration period)
+## Config Sources
 
-Runtime prefers `.ops.project/config` when present, with `.ops.yaml` as fallback. See [boundaries.md](boundaries.md) and [reference/config-files.md](reference/config-files.md).
+Runtime prefers `.ops.project/config` when present. `.ops.yaml` is optional
+compatibility I/O through `ops setup export-yaml` and `ops setup import-yaml`,
+plus a fallback for projects that have not materialized config yet. See
+[boundaries.md](boundaries.md) and [reference/config-files.md](reference/config-files.md).
 
 ## Action resolution
 

@@ -9,7 +9,11 @@ Layout of `.ops.project` — project memory and generated runtime state.
 ```text
 .ops.project/
   .gitignore
-  .history/              # backups from setup apply
+  .history/              # config snapshots and compatibility export backups
+    config/
+      <timestamp>-<label>/
+        manifest.json
+        config/
   config/
     project.json
     services.json
@@ -17,6 +21,7 @@ Layout of `.ops.project` — project memory and generated runtime state.
     profiles.json
     decisions.json
     ci.json
+    monitoring.json
   generated/
     discovery.json
     setup.json
@@ -24,12 +29,13 @@ Layout of `.ops.project` — project memory and generated runtime state.
     project_values.json
     run-plans/
       <service>.<action>.json
-    bin/                   # e.g. Go process_group builds
+    bin/                   # e.g. Go process_group builds and cross-shell shims
   logs/
   profiles/
   run/                     # PID files
   secrets/
     ci.env                 # local only, gitignored
+    infra.env              # local infra monitor secrets, gitignored
 ```
 
 ## File roles
@@ -38,17 +44,23 @@ Layout of `.ops.project` — project memory and generated runtime state.
 | --- | --- | --- |
 | `config/project.json` | setup project / materialize | setup lib, runtime |
 | `config/services.json` | setup services | manifest lib, run-plan, stacks |
+| `config/monitoring.json` | ops monitor setup / optional manual target config | monitor command |
 | `config/settings.json` | setup | settings lib, start/run |
 | `config/profiles.json` | setup | profiles, CI |
 | `config/decisions.json` | setup dependencies | setup replay |
 | `config/ci.json` | setup ci, ops ci | ci.sh, ssh |
+| `.history/config/<id>/` | ops backup create, ops rollback --apply safety backup | rollback |
 | `generated/discovery.json` | discovery | setup merge |
 | `generated/run-plans/*.json` | run, show | debugging, future runners |
 | `secrets/ci.env` | ops ci env | deploy credentials (local) |
+| `secrets/infra.env` | ops monitor setup | Postgres/Redis monitor credentials (local) |
 
-## Migration
+## Compatibility YAML
 
-Runtime prefers `config/` when present; falls back to `.ops.yaml`. Use `ops setup export-yaml --apply` and `ops setup import-yaml --apply` to sync between formats.
+Runtime prefers `config/` when present. `.ops.yaml` is optional compatibility
+I/O for projects or tools that still need YAML. Use
+`ops setup export-yaml --apply` and `ops setup import-yaml --apply` to move
+between formats deliberately.
 
 ## Sync commands
 

@@ -21,11 +21,14 @@ Shared setup helpers: profile paths, service field readers, config-first access 
 
 ## Inputs and outputs
 
-Reads `.ops.project/config/` and falls back to `.ops.yaml` `setup.services` during migration.
+Reads `.ops.project/config/` and falls back to `.ops.yaml` `setup.services`
+only when config has not been materialized.
 
 ## Extension points
 
-Add config readers when new `config/*.json` files are introduced; keep YAML fallback documented.
+Add config readers when new `config/*.json` files are introduced. New runtime
+code should not add direct `yq` reads unless it is explicitly handling YAML
+compatibility import/export.
 
 ## See also
 

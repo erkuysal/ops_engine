@@ -27,6 +27,7 @@ ops setup --check --json
 Per service (discovery proposal vs config):
 
 - `stack`, `path`, `role`
+- `compose_files`
 - `env_files`
 - inferred `port` and start `command`
 

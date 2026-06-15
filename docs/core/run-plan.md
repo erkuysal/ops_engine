@@ -26,7 +26,7 @@ Implemented in `run_plan_generate_json` (highest wins):
 2. Service override `.ops/commands/<id>/<action>.sh` (executable)
 3. Global override `.ops/commands/<action>.sh` (executable)
 4. Setup start command (start only)
-5. Manifest `actions.<action>`
+5. Configured `actions.<action>` from project config or YAML fallback
 6. Stack default command
 7. Legacy bridge script
 8. Unresolved
@@ -35,7 +35,7 @@ Full detail: [../reference/action-resolution.md](../reference/action-resolution.
 
 ## Inputs and outputs
 
-**Reads:** config/services, manifest, overrides, stack files.
+**Reads:** project config, YAML fallback when needed, overrides, stack files.
 
 **Writes:** `.ops.project/generated/run-plans/<service_id>.<action>.json`
 

@@ -10,7 +10,13 @@ Ops is a reusable Bash orchestration package: global `ops install`, per-project 
 
 **Never put project-specific values in package files under `.ops/`.**
 
-Project facts belong in `.ops.project/` or `.ops.yaml` (transitional). Details: [docs/boundaries.md](docs/boundaries.md).
+Project facts belong in `.ops.project/`. `.ops.yaml` is optional compatibility
+import/export only. Details: [docs/boundaries.md](docs/boundaries.md).
+
+For runtime/project reads, prefer config-neutral helpers such as
+`project_list_services`, `project_get_service_field`, and
+`project_require_config_or_yaml`. Avoid new direct `require_manifest` or `yq`
+reads unless the command is explicitly handling YAML import/export.
 
 ## Repository layout
 

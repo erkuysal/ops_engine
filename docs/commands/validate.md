@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Multi-pass validation of project ops config. Accepts `.ops.yaml` or `.ops.project/config/services.json` (config-only projects use a temporary manifest for validation).
+Multi-pass validation of project ops config. Validates `.ops.project/config`
+directly when present, and falls back to `.ops.yaml` only for compatibility
+projects that have not materialized config yet.
 
 ## CLI / entrypoints
 
@@ -10,14 +12,23 @@ Multi-pass validation of project ops config. Accepts `.ops.yaml` or `.ops.projec
 ops validate [--plain]
 ```
 
-When only config exists, validation reads `.ops.project/config` via `manifest_prepare_validation_source` in `core/lib/manifest.sh` / `manifest_sync.sh`.
+When config exists, validation reads `.ops.project/config` through
+`core/lib/config_validate.sh`. It does not generate a temporary YAML manifest.
 
 ## Source files
 
 - `core/commands/validate.sh`
-- `core/lib/manifest.sh`, `graph.sh`, `setup.sh`
+- `core/lib/config_validate.sh`, `manifest.sh`, `graph.sh`, `setup.sh`
 
 ## Passes
+
+Config source:
+
+1. JSON structure, required sections, and service semantics
+2. Filesystem checks for service paths and env files
+3. Settings/profile override validation
+
+YAML compatibility source:
 
 1. Syntax — `yq` parses `.ops.yaml`
 2. Structural — required keys and types
@@ -30,11 +41,12 @@ When only config exists, validation reads `.ops.project/config` via `manifest_pr
 | --- | --- |
 | 0 | Passed (warnings OK) |
 | 1 | Errors found |
-| 2 | Missing config/manifest or `yq` |
+| 2 | Missing config/YAML source or required tools |
 
 ## Config-only projects
 
-If `.ops.yaml` is absent but `.ops.project/config/services.json` exists, validate builds a temporary manifest from config and runs the same passes.
+If `.ops.yaml` is absent but `.ops.project/config/services.json` exists,
+validate runs against JSON config directly.
 
 ## Testing
 

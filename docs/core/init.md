@@ -24,6 +24,7 @@ source "${OPS_CORE_ROOT}/lib/init.sh"
 | `ops_core_root` | `.ops/core` path |
 | `manifest_path` | `.ops.yaml` path |
 | `OPS_PROJECT_ROOT`, `OPS_CORE_ROOT`, `OPS_MANIFEST` | Exported after bootstrap |
+| `OPS_PROJECT_STATE_DIR`, `OPS_PROJECT_GENERATED_DIR`, `OPS_PROJECT_RUN_DIR`, `OPS_PROJECT_HISTORY_DIR` | Project-local generated/runtime state |
 | `die`, `warn`, `info`, `ok`, `debug` | Logging / exit |
 | `ops_lock_acquire` / `ops_lock_release` | Mutating command lock |
 | `require_within_root` | Path traversal guard |
@@ -32,7 +33,7 @@ source "${OPS_CORE_ROOT}/lib/init.sh"
 
 ## Inputs and outputs
 
-Sets `OPS_CI`, `OPS_PLAIN`, `OPS_DEBUG` from environment. Adds `${OPS_LOCAL_DIR}/bin` to `PATH` for cross-shell shims.
+Sets `OPS_CI`, `OPS_PLAIN`, `OPS_DEBUG` from environment. Adds `${OPS_PROJECT_BIN}` to `PATH` for cross-shell shims. The shim directory is created lazily only when a shim is generated.
 
 ## Extension points
 

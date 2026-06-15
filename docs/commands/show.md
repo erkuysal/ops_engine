@@ -8,7 +8,7 @@ Read-only inspection of how an action would run (run plan fields, paths, strateg
 
 ```bash
 ops show <action> <service_id>
-ops show start userengine
+ops show start <service_id>
 ```
 
 ## Source files

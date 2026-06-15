@@ -14,7 +14,7 @@ Fallback stack for services that do not match a specialized strategy or need min
 
 ## Behavior
 
-Delegates to manifest actions or setup commands when present; otherwise uses generic PID-based stop/status patterns from run-plan defaults.
+Delegates to configured actions or setup commands when present; otherwise uses generic PID-based stop/status patterns from run-plan defaults.
 
 ## See also
 

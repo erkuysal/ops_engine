@@ -2,7 +2,7 @@
 
 This document defines the intended direction for `ops`: a project-independent orchestration system that can be installed once on a machine, then used inside any repository to discover, configure, run, and manage that project.
 
-The current implementation already contains useful pieces: stack probes, manifest validation, runtime state under `.ops.project`, service runners, stack strategies, and cross-shell helpers. The next phase is to reorganize those pieces around a clearer product model.
+The current implementation already contains useful pieces: stack probes, config validation, runtime state under `.ops.project`, service runners, stack strategies, and cross-shell helpers. The next phase is to reorganize those pieces around a clearer product model.
 
 ## Core Vision
 
@@ -69,7 +69,7 @@ It should:
 - infer service dependencies when possible
 - interview and preserve confirmed `depends_on` relationships
 - create project config/state under `.ops.project`
-- export or maintain `.ops.yaml` only as a compatibility/human-editable layer while needed
+- export or import `.ops.yaml` only as an explicit compatibility format while needed
 - enter an interactive flow when required values are ambiguous or missing
 
 `setup` should be idempotent. Re-running it should preserve confirmed project decisions, update stale discovery facts, and ask only about new or unresolved ambiguity.
@@ -100,7 +100,9 @@ Runtime commands such as `ops start`, `ops stop`, `ops run`, `ops show`, and `op
 
 They should not rediscover the whole project on every run.
 
-They should prefer `.ops.project` config/state first. During the migration period, they may fall back to `.ops.yaml`.
+They should prefer `.ops.project` config/state first. They may fall back to
+`.ops.yaml` only for compatibility projects that have not materialized config
+yet.
 
 ### `ops ci`
 
@@ -140,22 +142,22 @@ Suggested long-term shape:
     workspace.json
     runtime.json
     run-plans/
-      backend.start.json
-      userengine.start.json
+      api.start.json
+      worker.start.json
     bin/
-      userengine/
+      worker/
         gateway
         api
         sweeper
         debouncer
   logs/
-    backend.log
-    userengine/
+    api.log
+    worker/
       gateway.log
       api.log
   run/
-    backend.pid
-    userengine/
+    api.pid
+    worker/
       gateway.pid
       api.pid
   .history/
@@ -163,13 +165,14 @@ Suggested long-term shape:
 
 ### `.ops.yaml`
 
-`.ops.yaml` may remain during the transition as:
+`.ops.yaml` may remain as:
 
 - a human-editable compatibility format
 - an export/import format
 - a convenient review surface
 
-Long term, `.ops.project/config` can become the primary source of truth.
+`.ops.project/config` is the primary source of truth. YAML is a deliberate
+compatibility import/export path.
 
 Potential future commands:
 
@@ -188,12 +191,12 @@ Discovery answers: what exists in the repository?
 
 Examples:
 
-- `BACKENDs/backend/manage.py`
-- `BACKENDs/userengine/go.mod`
-- `BACKENDs/userengine/cmd/gateway`
-- `frontend/package.json`
-- `frontend/web/package.json`
-- `frontend/soundilerry/package.json`
+- `services/api/manage.py`
+- `services/worker/go.mod`
+- `services/worker/cmd/gateway`
+- `apps/package.json`
+- `apps/web/package.json`
+- `apps/desktop/package.json`
 - Docker Compose files
 - env files
 - lockfiles
@@ -212,7 +215,7 @@ Example:
 {
   "directories": [
     {
-      "path": "frontend",
+      "path": "apps",
       "stack": "node",
       "role": "workspace_root",
       "service": false,
@@ -220,7 +223,7 @@ Example:
       "evidence": ["package.json", "workspaces"]
     },
     {
-      "path": "frontend/web",
+      "path": "apps/web",
       "stack": "node",
       "role": "app",
       "service": true,
@@ -228,7 +231,7 @@ Example:
       "evidence": ["package.json", "vite dependency", "dev script"]
     },
     {
-      "path": "BACKENDs/userengine",
+      "path": "services/worker",
       "stack": "go",
       "role": "process_group",
       "service": true,
@@ -245,10 +248,10 @@ Resolution answers: what should `ops` do with those facts?
 
 Examples:
 
-- classify `frontend` as a workspace root, not a runnable service
-- classify `frontend/web` as a Node/Vite app
-- classify `frontend/api_core` as a shared library
-- classify `BACKENDs/userengine` as a Go process group
+- classify `apps` as a workspace root, not a runnable service
+- classify `apps/web` as a Node/Vite app
+- classify `packages/api-client` as a shared library
+- classify `services/worker` as a Go process group
 - infer `python manage.py runserver` for Django when no better command is found
 - infer Go build outputs from `cmd/*`
 - choose Windows Go cross-compile when running in WSL with only Windows Go available
@@ -316,7 +319,7 @@ This distinction matters for cross-OS compatibility.
 
 Example:
 
-In WSL, `go` may resolve to `.ops/bin/go`, which is a shim to Windows Go. That should not be treated as native Linux Go. The runner must know:
+In WSL, `go` may resolve to a shim under `.ops.project/generated/bin/shims`, which points to Windows Go. That should not be treated as native Linux Go. The runner must know:
 
 - shell OS: WSL/Linux
 - tool host OS: Windows
@@ -343,18 +346,18 @@ It should avoid asking when confidence is high.
 Example questions:
 
 ```text
-Detected frontend as a Node workspace root with child packages.
-Use child packages as services and skip frontend itself? [Y/n]
+Detected apps as a Node workspace root with child packages.
+Use child packages as services and skip apps itself? [Y/n]
 ```
 
 ```text
-Detected BACKENDs/userengine has multiple Go cmd entries:
+Detected services/worker has multiple Go cmd entries:
 gateway, api, sweeper, debouncer.
 Treat this as a process group? [Y/n]
 ```
 
 ```text
-Could not infer start command for backend.
+Could not infer start command for api.
 Choose:
 1. python manage.py runserver 0.0.0.0:8000
 2. ./start_server.sh
@@ -369,20 +372,14 @@ Dependency interviews should follow the same rule: preserve existing `depends_on
 
 The current implementation does some useful detection, but it is too shallow.
 
-Known gaps:
+Known remaining gaps:
 
-- `install` has a first-pass global Bash launcher and stable user-level package copy
-- `setup` currently depends on an existing `.ops.yaml`
-- `bootstrap`, `init`, and `update` split responsibilities that should move into setup
-- detection only emits `id`, `path`, `stack`, and `score`
-- detection does not emit role, service/non-service classification, evidence, or confidence
-- Node workspace roots can be incorrectly proposed as services
-- Go process groups are not inferred automatically from `cmd/*`
-- env files are not discovered intelligently
-- ports and health checks are not inferred deeply
-- `.ops.project` does not yet store a discovery cache
-- runtime still primarily reads `.ops.yaml`
-- legacy `.scripts` metadata is still richer than `.ops.project` metadata
+- Docker Compose dependency inference is still shallow.
+- Some stack probes need richer package-manager and framework signals.
+- Python/Django runtime handling needs broader conda/venv coverage.
+- Some legacy compatibility names remain in helper APIs such as `manifest_*`.
+- Documentation and contributor guidance should keep pushing new code toward
+  config-first helpers.
 
 ## Migration Plan
 
@@ -435,8 +432,8 @@ Docker:
 - Add `.ops.project/config/project.json`
 - Add `.ops.project/config/services.json`
 - Add `.ops.project/config/settings.json`
-- Make `.ops.yaml` export/import compatible with that config
-- Runtime commands should read `.ops.project/config` first
+- Keep `.ops.yaml` export/import compatible with that config
+- Runtime commands read `.ops.project/config` first
 
 ### Phase 5: Runtime Plans
 
@@ -464,17 +461,17 @@ Docker:
 - generate run plans
 - validate the result
 
-For this repository, a successful setup should infer:
+For a representative multi-service repository, setup should infer:
 
-- `BACKENDs/backend` as Django service
-- `BACKENDs/voice_app` as Phoenix service
-- `BACKENDs/userengine` as Go process group
-- `frontend` as Node workspace root, not service
-- `frontend/web` as Node/Vite web app
-- `frontend/soundilerry` as Electron/Node app
-- `frontend/api_core` as shared library or non-runtime package
+- `services/api` as Django service
+- `services/realtime` as Phoenix service
+- `services/worker` as Go process group
+- `apps` as Node workspace root, not service
+- `apps/web` as Node/Vite web app
+- `apps/desktop` as Electron/Node app
+- `packages/api-client` as shared library or non-runtime package
 
-It should not propose `frontend` itself as a runnable service unless the user explicitly chooses that.
+It should not propose the workspace root itself as a runnable service unless the user explicitly chooses that.
 
 ## Guiding Principle
 

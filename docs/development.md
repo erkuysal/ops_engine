@@ -8,7 +8,7 @@ How to change the ops package and verify behavior from a consuming repository.
 
 - Bash 4+
 - `jq` (required by setup, run-plan, discovery)
-- `yq` (manifest validation and some manifest reads)
+- `yq` (YAML compatibility import/export and fallback validation)
 - Stack-specific tools when testing those stacks (e.g. `go`, `node`, `python`)
 
 ## Repository layout

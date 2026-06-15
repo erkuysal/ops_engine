@@ -1,3 +1,7 @@
 .ops.project/
 .tmp/
 .history/
+
+# Allow committed test fixtures
+!tests/fixtures/**/.ops.project/
+!tests/fixtures/**/.ops.project/**

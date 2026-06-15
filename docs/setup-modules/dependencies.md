@@ -21,7 +21,7 @@ ops setup dependencies --interactive --apply
 **Reads:**
 
 - `discovery.json` (from scan or cache)
-- Existing `decisions.json`, manifest `depends_on`
+- Existing `decisions.json` and configured `depends_on`
 
 **Writes (with `--apply`):**
 
@@ -39,7 +39,9 @@ ops setup dependencies --interactive --apply
 3. Prints preview via `_print_dependency_decisions_preview`.
 4. Materializes config on `--apply`.
 
-Inference requires inferred service ports in setup JSON (Django 8000, Phoenix 4000, Vite 5173, etc.). Existing manifest `port: 0` does not block inferred ports during merge.
+Inference requires inferred service ports in setup JSON (Django 8000, Phoenix
+4000, Vite 5173, etc.). Existing configured `port: 0` does not block inferred
+ports during merge.
 
 ## Extension points
 

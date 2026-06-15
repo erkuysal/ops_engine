@@ -7,7 +7,7 @@ Contributor and implementation docs for the `.ops` package. For day-to-day usage
 | Doc | Audience |
 | --- | --- |
 | [architecture.md](architecture.md) | How commands, discovery, config, and runtime fit together |
-| [boundaries.md](boundaries.md) | What belongs in `.ops/` vs `.ops.project/` vs `.ops.yaml` |
+| [boundaries.md](boundaries.md) | What belongs in `.ops/`, `.ops.project/`, and optional YAML exports |
 | [development.md](development.md) | Local workflow, env vars, debugging, smoke checks |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Contributor entry point and decision table |
 
@@ -18,6 +18,7 @@ Contributor and implementation docs for the `.ops` package. For day-to-day usage
 | [setup-modules/project.md](setup-modules/project.md) | `ops setup project` |
 | [setup-modules/services.md](setup-modules/services.md) | `ops setup services` |
 | [setup-modules/dependencies.md](setup-modules/dependencies.md) | `ops setup dependencies` |
+| [setup-modules/run-plans.md](setup-modules/run-plans.md) | `ops setup run-plans` |
 | [setup-modules/ci.md](setup-modules/ci.md) | `ops setup ci` |
 | [setup-modules/all-and-wizard.md](setup-modules/all-and-wizard.md) | `ops setup`, `ops setup all`, wizard |
 
@@ -33,6 +34,12 @@ Contributor and implementation docs for the `.ops` package. For day-to-day usage
 | [commands/stop.md](commands/stop.md) | `core/commands/stop.sh` |
 | [commands/status.md](commands/status.md) | `core/commands/status.sh` |
 | [commands/logs.md](commands/logs.md) | `core/commands/logs.sh` |
+| [commands/cleanup.md](commands/cleanup.md) | `core/commands/cleanup.sh` |
+| [commands/backup.md](commands/backup.md) | `core/commands/backup.sh`, `core/commands/rollback.sh` |
+| [commands/package.md](commands/package.md) | `core/commands/package.sh` |
+| [commands/monitor.md](commands/monitor.md) | `core/commands/monitor.sh` |
+| [commands/build.md](commands/build.md) | `core/commands/build.sh` |
+| [commands/deploy.md](commands/deploy.md) | `core/commands/deploy.sh` |
 | [commands/ci.md](commands/ci.md) | `core/commands/ci.sh` |
 | [commands/validate.md](commands/validate.md) | `core/commands/validate.sh` |
 | [commands/doctor.md](commands/doctor.md) | `core/commands/doctor.sh` |

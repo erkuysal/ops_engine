@@ -18,7 +18,7 @@ ops run start backend --foreground
 
 ## Behavior
 
-1. Validates service exists in manifest/config.
+1. Validates service exists in project config or YAML fallback.
 2. Generates run plan JSON and writes to `.ops.project/generated/run-plans/`.
 3. Runs preflight checks.
 4. Dispatches by `selected_strategy` (stack, override, legacy bridge).

@@ -44,7 +44,7 @@ Read-only. Stale PID files (dead process) are removed when status is checked.
 ```bash
 bash tests/run.sh
 ./ops.sh status --plain
-./ops.sh status userengine --json
+./ops.sh status <service_id> --json
 ```
 
 ## See also

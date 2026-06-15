@@ -15,10 +15,11 @@ The immediate goal is:
 - setup can distinguish services from workspace roots and shared libraries
 - setup can propose project config from discovery
 - setup can apply discovery-derived setup into `.ops.project/config`
-- runtime helpers can prefer `.ops.project/config` over `.ops.yaml`
+- runtime helpers prefer `.ops.project/config`, with `.ops.yaml` only as
+  compatibility fallback/import/export
 - setup asks interactively only for ambiguous values
-- setup can bootstrap `.ops.project/config` and a transitional `.ops.yaml` when `.ops.yaml` is absent
-- setup can safely merge discovered runtime services back into `.ops.yaml`
+- setup bootstraps `.ops.project/config` when `.ops.yaml` is absent
+- YAML writes happen through explicit `ops setup export-yaml --apply`
 - legacy discovery commands route through setup/discovery
 - `ops install` installs a global Bash launcher instead of doing project setup
 - runtime commands write shared run-plan artifacts before display/execution
@@ -45,20 +46,20 @@ The immediate goal is:
 - Added `ops setup discover`.
 - Added discovery preview to `ops setup --dry-run`.
 - Improved first-pass role detection:
-  - `frontend` is classified as `workspace_root` and skipped by default
-  - `frontend/api_core` is classified as `shared_library` and skipped by default
-  - `BACKENDs/userengine` is classified as a Go `process_group`
+  - workspace roots are classified as `workspace_root` and skipped by default
+  - shared packages are classified as `shared_library` and skipped by default
+  - multi-command Go services are classified as `process_group`
 - Clarified desired command responsibilities:
   - `ops install`: global/system install
   - `ops setup`: project initializer/discovery/config generator
   - runtime commands consume `.ops.project`
 - Added initial generic Go `process_group` support.
-- Updated `userengine` in `.ops.yaml` to use:
+- Updated a Go process-group service in `.ops.yaml` to use:
   - `runner.kind: process_group`
-  - build outputs under `.ops.project/generated/bin/userengine`
+  - build outputs under `.ops.project/generated/bin/<service_id>`
 - Added cross-shell detection helpers for Windows-hosted tools under WSL.
 - Verified Windows Go can cross-compile Linux ELF binaries into `.ops.project`.
-- Updated `ops show start userengine` to display the managed Go process group plan.
+- Updated `ops show start <service_id>` to display the managed Go process group plan.
 - Added discovery-derived `.ops.project/config` materialization:
   - `.ops.project/config/project.json`
   - `.ops.project/config/services.json`
@@ -73,13 +74,13 @@ The immediate goal is:
   - confirmed/existing processes stay enabled
   - discovered webhook-like workers are marked ambiguous
   - ambiguous processes are disabled by default unless interactive setup includes them
-- Added no-manifest `ops setup --apply` support that creates `.ops.project/config` and a transitional `.ops.yaml` from discovery.
+- Added no-manifest `ops setup --apply` support that creates `.ops.project/config` from discovery.
 - Added `ops setup apply-services`:
   - previews discovered runtime services
   - shows services removed from runtime
   - applies the merged service list only with `--apply`
   - preserves confirmed service fields where possible
-- Removed `api_core` from the runtime service list because discovery classifies it as a shared library.
+- Removed shared libraries from the runtime service list when discovery classifies them as non-runtime packages.
 - Replaced old `bootstrap`, `init`, and `update` implementations with compatibility wrappers around setup:
   - `bootstrap --dry-run` -> `setup --dry-run`
   - `bootstrap --force` -> `setup apply-services --apply`
@@ -113,7 +114,7 @@ The immediate goal is:
   - `ops setup dependencies --interactive` interviews service dependencies
   - `ops setup dependencies --apply` writes dependency decisions to `.ops.project/config/decisions.json`
   - selected dependencies are materialized into `.ops.project/config/services.json`
-  - setup preserves existing `.ops.yaml` service fields while config is regenerated
+  - setup preserves existing confirmed service fields while config is regenerated
 - Added basic CI readiness support:
   - `ops ci setup` previews non-secret CI/server metadata
   - `ops ci setup --apply` writes `.ops.project/config/ci.json`
@@ -156,7 +157,7 @@ The immediate goal is:
 
 **Still open:**
 
-- Gradually retire transitional `.ops.yaml` references in docs and legacy setup paths
+- Keep tracking remaining compatibility-boundary cleanup in `ISSUES/2_OPS_YAML_RETIREMENT.md`.
 
 ### 2. Discovery and setup intelligence (in progress)
 
@@ -201,11 +202,14 @@ The immediate goal is:
 ## Recently Completed (implementation slices)
 
 - **Tests + CI:** `tests/run.sh`, stack fixtures under `tests/fixtures/`, smoke suites, GitHub Actions workflow (`.github/workflows/ci.yml`).
+- **Run-plan regeneration:** `ops setup run-plans` previews/writes `.ops.project/generated/run-plans/*.json` from current config.
+- **Monitoring foundation:** `ops monitor status|test|doctor` derives HTTP/TCP targets from service config, supports PostgreSQL/Redis targets from `monitoring.json`, can upsert local infra env values, includes guided infra prompts, provides Postgres info/databases/users inspection, and has CI-style test failure semantics.
+- **Native container basics:** `ops build` plans/runs Dockerfile or compose builds and optional pushes; `ops deploy` remotely pulls/restarts compose-backed services from CI deploy metadata; positional service names now resolve exact `.ops` service ids first and compose service names second. Sync/checkpoints remain future slices.
 - **`ops status` / `ops ps`:** runtime status from PID files, ports, healthchecks, `--json` output (`core/lib/status.sh`, `core/commands/status.sh`).
 - **Env file discovery:** `core/lib/env_discovery.sh` scans `.env*` files into `discovery.json`, `services.json`, and `project.json` `global_env_files`.
 - **`ops setup check`:** read-only drift detection (discovery vs config), `--json` report (`core/lib/setup_check.sh`, `core/lib/setup_check.jq`).
 - **Healthcheck-aware start:** post-start HTTP wait via `core/lib/healthcheck.sh`; `--no-wait` opt-out; settings `start.healthcheck.*`.
-- **Docker compose stack:** discovery captures compose files, `docker_group` services keep `compose_files`, docker runner/status use `docker compose -f ...`.
+- **Docker compose stack:** discovery captures standard compose files under service paths, services keep `compose_files`, docker runner/status and container build/deploy use `docker compose -f ...`.
 - **Unified runner profiles:** `core/lib/runner.sh` maps roles to `runner.kind` (`stack`, `process_group`, `compose`); managed runners skip overrides in run/show/setup.
 - **Slice A — Config sync:** `manifest_sync.sh`, export/import-yaml, config-first validate
 - **Slice B — Cross-shell:** `run_cross_shell_binary`, Go/Node stack integration
@@ -301,11 +305,10 @@ Notes:
 - `ops setup --dry-run` now prints proposed services and setup sections from structured discovery.
 - `ops setup --apply` now writes discovery-derived setup values and `.ops.project/config` files.
 - Existing confirmed runtime values such as Python manager/env are preserved during apply.
-- `.ops.yaml services` is not rewritten yet; that remains a separate, higher-risk merge step.
 - Legacy metadata files are now generated under `.ops.project/generated` instead of root `scripts/`.
-- If `.ops.yaml` is absent, `setup --apply` can now create project config and a transitional manifest from discovery.
+- If `.ops.yaml` is absent, `setup --apply` can now create project config from discovery.
 - Ambiguous process-group outputs are recorded in `.ops.project/config/decisions.json`.
-- `ops setup apply-services --apply` now updates `.ops.yaml services` from discovery and skips non-runtime roles.
+- `ops setup apply-services --apply` now updates project config from discovery and skips non-runtime roles.
 
 ### Slice 5: `.ops.project/config`
 
@@ -320,7 +323,7 @@ Tasks:
 .ops.project/config/profiles.json
 ```
 
-- Keep writing `.ops.yaml` as compatibility export.
+- Keep `.ops.yaml` as explicit compatibility export/import.
 - Add config read helpers that prefer `.ops.project/config`.
 
 Status: first pass completed
@@ -329,7 +332,7 @@ Notes:
 
 - Setup now materializes project memory into `.ops.project/config`.
 - Runtime helper reads now prefer `.ops.project/config` for service list/fields, setup values, and settings.
-- `.ops.yaml` remains the compatibility fallback and validation target for now.
+- `.ops.yaml` remains a compatibility fallback when config is absent.
 - `ops show` reports when service config is coming from `.ops.project/config/services.json`.
 - `.ops.project/config/decisions.json` records setup decisions such as whether a discovered process belongs in local runtime.
 
@@ -391,9 +394,9 @@ bash ops.sh setup project
 bash ops.sh setup ci
 bash ops.sh ci setup
 bash ops.sh ci doctor
-bash ops.sh show start userengine
-bash ops.sh start userengine --dry-run
-bash ops.sh run build userengine
+bash ops.sh show start <service_id>
+bash ops.sh start <service_id> --dry-run
+bash ops.sh run build <service_id>
 bash ops.sh validate --plain
 ```
 
@@ -415,12 +418,12 @@ Dependency inference is heuristic (Vite proxy + dev-script ports). Review with
 ## Open Decisions
 
 - Should `.ops.project/config` use one combined `project.json` or split files?
-- Should `.ops.yaml` be generated by default after setup, or only when requested?
+- What remaining helper APIs should be renamed or wrapped away from `manifest_*`?
 - Should setup always create `.ops.project`, even in dry-run mode?
 - How should confirmed interactive answers be represented?
 - Should global `ops install` copy the whole package or reference a source checkout?
 - Should process group runtime support per-process env overrides in the first pass?
-- Should shared libraries like `api_core` be included in config as non-runtime nodes?
+- Should shared libraries be included in config as non-runtime nodes?
 
 ## Notes
 

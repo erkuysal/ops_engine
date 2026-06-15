@@ -32,14 +32,19 @@ require_bins bash jq yq
 ops_run() {
   local project_root="$1"
   shift
-  # Drop cached config paths so each fixture root resolves its own .ops.project/config.
-  unset OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE OPS_PROJECT_CONFIG_SETTINGS_FILE
-  OPS_PROJECT_ROOT="${project_root}" \
-  OPS_CORE_ROOT="${OPS_CORE_ROOT}" \
-  OPS_PLAIN=true \
-  CI=true \
-  OPS_NON_INTERACTIVE=true \
-  bash "${OPS_CORE_ROOT}/main.sh" "$@"
+  (
+    # Drop cached project paths so each fixture root resolves its own .ops.project state.
+    unset OPS_PROJECT_STATE_DIR OPS_PROJECT_LOG_DIR OPS_PROJECT_RUN_DIR OPS_PROJECT_GENERATED_DIR
+    unset OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
+    unset OPS_PROJECT_CONFIG_SETTINGS_FILE OPS_PROJECT_CONFIG_PROFILES_FILE OPS_PROJECT_HISTORY_DIR
+    unset OPS_PROJECT_SETUP_GENERATED_FILE OPS_PROJECT_SETUP_GENERATED_LEGACY_FILE OPS_PROFILES_DIR
+    OPS_PROJECT_ROOT="${project_root}" \
+    OPS_CORE_ROOT="${OPS_CORE_ROOT}" \
+    OPS_PLAIN=true \
+    CI=true \
+    OPS_NON_INTERACTIVE=true \
+    bash "${OPS_CORE_ROOT}/main.sh" "$@"
+  )
 }
 
 ops_source_lib() {
