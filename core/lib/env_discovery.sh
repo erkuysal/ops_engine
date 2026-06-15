@@ -28,6 +28,50 @@ env_discovery_is_example_name() {
   [[ "${name}" == *.example ]] || [[ "${name}" == *.sample ]] || [[ "${name}" == *.template ]]
 }
 
+env_discovery_is_deploy_name() {
+  local name="${1:?env_discovery_is_deploy_name: name required}"
+  case "${name}" in
+    .env.staging|.staging.env|.env.production|.production.env|.env.prod|.prod.env) return 0 ;;
+  esac
+  return 1
+}
+
+env_discovery_profile() {
+  printf '%s' "${OPS_SETUP_PROFILE:-local}"
+}
+
+env_discovery_profile_allows_deploy_name() {
+  local name="${1:?env_discovery_profile_allows_deploy_name: name required}"
+  local profile
+  profile="$(env_discovery_profile)"
+  case "${profile}:${name}" in
+    staging:.env.staging|staging:.staging.env) return 0 ;;
+    production:.env.production|production:.production.env|production:.env.prod|production:.prod.env) return 0 ;;
+    prod:.env.production|prod:.production.env|prod:.env.prod|prod:.prod.env) return 0 ;;
+  esac
+  return 1
+}
+
+env_discovery_should_skip_deploy_name() {
+  local name="${1:?env_discovery_should_skip_deploy_name: name required}"
+  env_discovery_is_deploy_name "${name}" || return 1
+  env_discovery_profile_allows_deploy_name "${name}" && return 1
+  return 0
+}
+
+env_discovery_profile_candidates() {
+  local profile
+  profile="$(env_discovery_profile)"
+  case "${profile}" in
+    staging)
+      printf '%s\n' .env.staging .staging.env
+      ;;
+    production|prod)
+      printf '%s\n' .env.production .production.env .env.prod .prod.env
+      ;;
+  esac
+}
+
 env_discovery_rel_path() {
   local dir_rel="$1"
   local filename="$2"
@@ -71,11 +115,24 @@ env_discovery_files_in_dir_json() {
     found+=("${rel}")
   done
 
+  while IFS= read -r candidate; do
+    [[ -z "${candidate}" ]] && continue
+    abs_path="${abs_dir}/${candidate}"
+    [[ -f "${abs_path}" ]] || continue
+    env_discovery_is_example_name "${candidate}" && continue
+    rel="$(env_discovery_rel_path "${dir_rel}" "${candidate}")"
+    [[ -n "${seen[${rel}]:-}" ]] && continue
+    seen["${rel}"]=1
+    found+=("${rel}")
+    has_non_example=true
+  done < <(env_discovery_profile_candidates)
+
   while IFS= read -r abs_path; do
     [[ -z "${abs_path}" ]] && continue
     name="$(basename "${abs_path}")"
     [[ "${name}" == ".env" ]] && continue
     env_discovery_is_example_name "${name}" && continue
+    env_discovery_should_skip_deploy_name "${name}" && continue
     rel="$(env_discovery_rel_path "${dir_rel}" "${name}")"
     [[ -n "${seen[${rel}]:-}" ]] && continue
     seen["${rel}"]=1

@@ -88,9 +88,55 @@ _persist_django_conda_env() {
   local env_name="$2"
   local current_manager=""
   local current_env=""
+  local tmp_file=""
   [[ -n "${env_name}" ]] || return 0
 
-  require_bins yq
+  require_bins jq yq
+
+  if project_config_services_exists; then
+    tmp_file="$(mktemp)"
+    jq --arg id "${service_id}" --arg env_name "${env_name}" '
+      .services |= map(
+        if .id == $id then
+          .django = (.django // {})
+          | .django.conda_env = $env_name
+        else
+          .
+        end
+      )
+    ' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" > "${tmp_file}"
+    mv "${tmp_file}" "${OPS_PROJECT_CONFIG_SERVICES_FILE}"
+
+    if [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
+      current_manager="$(jq -r '.setup.runtimes.python.manager // ""' "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" 2>/dev/null || true)"
+      current_env="$(jq -r '.setup.runtimes.python.env // ""' "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" 2>/dev/null || true)"
+      tmp_file="$(mktemp)"
+      jq \
+        --arg env_name "${env_name}" \
+        --arg current_manager "${current_manager}" \
+        --arg current_env "${current_env}" \
+        '.setup = (.setup // {})
+         | .setup.runtimes = (.setup.runtimes // {})
+         | .setup.runtimes.python = (.setup.runtimes.python // {})
+         | if ($current_manager == "" or $current_manager == "null") then .setup.runtimes.python.manager = "conda" else . end
+         | if ($current_env == "" or $current_env == "null") then .setup.runtimes.python.env = $env_name else . end' \
+        "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" > "${tmp_file}"
+      mv "${tmp_file}" "${OPS_PROJECT_CONFIG_SETTINGS_FILE}"
+    fi
+
+    if [[ -f "${OPS_PROJECT_SETUP_GENERATED_FILE}" ]]; then
+      tmp_file="$(mktemp)"
+      jq --arg id "${service_id}" --arg env_name "${env_name}" '
+        .services[$id].django = (.services[$id].django // {})
+        | .services[$id].django.conda_env = $env_name
+        | .runtimes.python = (.runtimes.python // {})
+        | if ((.runtimes.python.manager // "") == "") then .runtimes.python.manager = "conda" else . end
+        | if ((.runtimes.python.env // "") == "") then .runtimes.python.env = $env_name else . end
+      ' "${OPS_PROJECT_SETUP_GENERATED_FILE}" > "${tmp_file}"
+      mv "${tmp_file}" "${OPS_PROJECT_SETUP_GENERATED_FILE}"
+    fi
+    return 0
+  fi
 
   yq e -i ".setup.services.\"${service_id}\".django.conda_env = \"${env_name}\"" "${OPS_MANIFEST}"
 
@@ -106,6 +152,53 @@ _persist_django_conda_env() {
 
   mkdir -p "${OPS_PROJECT_GENERATED_DIR}"
   yq e -o=json -I=2 '.setup' "${OPS_MANIFEST}" > "${OPS_PROJECT_SETUP_GENERATED_FILE}"
+}
+
+_setup_profile_allows_deploy_env_name() {
+  local profile="$1" name="$2"
+  case "${profile}:${name}" in
+    staging:.env.staging|staging:.staging.env) return 0 ;;
+    production:.env.production|production:.production.env|production:.env.prod|production:.prod.env) return 0 ;;
+    prod:.env.production|prod:.production.env|prod:.env.prod|prod:.prod.env) return 0 ;;
+  esac
+  return 1
+}
+
+_env_file_deploy_name() {
+  local name="$1"
+  case "${name}" in
+    .env.staging|.staging.env|.env.production|.production.env|.env.prod|.prod.env) return 0 ;;
+  esac
+  return 1
+}
+
+_project_global_env_files() {
+  project_global_env_files
+}
+
+_warn_deployment_env_item() {
+  local profile="$1" scope="$2" item="$3"
+  local name
+  name="$(basename "${item}")"
+  _env_file_deploy_name "${name}" || return 0
+  _setup_profile_allows_deploy_env_name "${profile}" "${name}" && return 0
+  ops_warn "[${scope}] Deployment env file '${item}' is configured for profile '${profile}'."
+}
+
+_warn_deployment_env_files_for_start() {
+  local profile item svc
+  profile="$(setup_default_profile)"
+  while IFS= read -r item; do
+    [[ -z "${item}" || "${item}" == "null" ]] && continue
+    _warn_deployment_env_item "${profile}" "project" "${item}"
+  done < <(_project_global_env_files)
+
+  for svc in "${EXEC_LIST[@]+"${EXEC_LIST[@]}"}"; do
+    while IFS= read -r item; do
+      [[ -z "${item}" || "${item}" == "null" ]] && continue
+      _warn_deployment_env_item "${profile}" "${svc}" "${item}"
+    done < <(manifest_get_service_list_field "${svc}" env_files 2>/dev/null || true)
+  done
 }
 
 _wait_for_service_health() {
@@ -212,6 +305,7 @@ fi
 
 ops_info "Execution order: ${EXEC_LIST[*]}"
 ops_info "Start mode: ${START_MODE}"
+_warn_deployment_env_files_for_start
 printf '\n'
 
 if [[ "${DRY_RUN}" == "true" ]]; then

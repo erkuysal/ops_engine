@@ -22,4 +22,19 @@ suite_docker_compose() {
   assert_jq_eq "services config keeps compose files" \
     '.services[] | select(.id == "infra") | .compose_files | join(",")' \
     "${root}/.ops.project/config/services.json" "infra/docker-compose.yml"
+
+  root="$(fixture_copy node-vite)"
+  assert_ok "node service compose discover --apply" \
+    ops_run "${root}" setup discover --apply
+
+  discovery_file="${root}/.ops.project/generated/discovery.json"
+  assert_jq_eq "node service compose files discovered" \
+    '.directories[] | select(.id == "web") | .compose_files | join(",")' \
+    "${discovery_file}" "web/docker-compose.yml"
+
+  assert_ok "node service compose setup --apply" \
+    ops_run "${root}" setup --apply
+  assert_jq_eq "node service config keeps compose files" \
+    '.services[] | select(.id == "web") | .compose_files | join(",")' \
+    "${root}/.ops.project/config/services.json" "web/docker-compose.yml"
 }

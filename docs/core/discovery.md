@@ -25,7 +25,9 @@ Structured workspace discovery: scan directories, score stack probes, classify r
 - Classifies entries: `app`, `workspace_root`, `shared_library`, `process_group`, etc.
 - Invokes `probe_<stack>_score_dir` for each candidate directory.
 - Node/Go/Django/Phoenix-specific evidence in `_discovery_*_json` helpers.
-- Docker compose discovery records `compose_files` for `docker_group` services.
+- Standard compose filenames under a detected service path are recorded in
+  `compose_files`; pure Docker/Compose directories still become `docker_group`
+  services.
 - Setup infers `runner.kind: compose` for `docker_group` roles and `process_group` for multi-binary Go services.
 - Env file discovery via `core/lib/env_discovery.sh` (service `env_files`, project `global_env_files`).
 

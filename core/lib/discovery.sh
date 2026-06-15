@@ -45,7 +45,7 @@ _discovery_node_json() {
   local role="app" service=true confidence="0.70"
   local evidence=()
   local framework=""
-  local package_name scripts_json deps_json
+  local package_name scripts_json deps_json compose_files
   local dev_script description
 
   package_name="$(jq -r '.name // ""' "${pkg}" 2>/dev/null || true)"
@@ -53,6 +53,7 @@ _discovery_node_json() {
   dev_script="$(jq -r '.scripts.dev // ""' "${pkg}" 2>/dev/null || true)"
   scripts_json="$(jq -c '.scripts // {}' "${pkg}" 2>/dev/null || printf '{}')"
   deps_json="$(jq -c '(.dependencies // {}) + (.devDependencies // {}) + (.optionalDependencies // {})' "${pkg}" 2>/dev/null || printf '{}')"
+  compose_files="$(_discovery_docker_compose_files_json "${rel_path}" "${abs_path}")"
 
   evidence+=("package.json")
 
@@ -109,6 +110,7 @@ _discovery_node_json() {
     --arg framework "${framework}" \
     --argjson scripts "${scripts_json}" \
     --argjson deps "${deps_json}" \
+    --argjson compose_files "${compose_files}" \
     --argjson evidence "$(_discovery_json_string_array "$(printf '%s\n' "${evidence[@]}")")" \
     '{
       path: $path,
@@ -118,6 +120,7 @@ _discovery_node_json() {
       confidence: ($confidence | tonumber),
       score: $score,
       package: {name: $package_name, framework: $framework, scripts: $scripts},
+      compose_files: $compose_files,
       evidence: $evidence
     }'
 }
@@ -149,9 +152,10 @@ _discovery_go_outputs_json() {
 
 _discovery_go_json() {
   local rel_path="$1" abs_path="$2" score="$3"
-  local outputs_json role="app" service=true confidence="0.75"
+  local outputs_json compose_files role="app" service=true confidence="0.75"
   local evidence=("go.mod")
   outputs_json="$(_discovery_go_outputs_json "${abs_path}")"
+  compose_files="$(_discovery_docker_compose_files_json "${rel_path}" "${abs_path}")"
 
   if [[ "$(jq 'length' <<< "${outputs_json}")" -gt 1 ]]; then
     role="process_group"
@@ -178,6 +182,7 @@ _discovery_go_json() {
     --argjson score "${score}" \
     --arg confidence "${confidence}" \
     --argjson outputs "${outputs_json}" \
+    --argjson compose_files "${compose_files}" \
     --argjson evidence "$(_discovery_json_string_array "$(printf '%s\n' "${evidence[@]}")")" \
     '{
       path: $path,
@@ -187,6 +192,7 @@ _discovery_go_json() {
       confidence: ($confidence | tonumber),
       score: $score,
       build: {outputs: $outputs},
+      compose_files: $compose_files,
       evidence: $evidence
     }'
 }
@@ -195,7 +201,9 @@ _discovery_generic_json() {
   local rel_path="$1" abs_path="$2" stack="$3" score="$4"
   local role="app" service=true confidence="0.70"
   local evidence=("${stack} probe")
-  local compose_files='[]'
+  local compose_files
+
+  compose_files="$(_discovery_docker_compose_files_json "${rel_path}" "${abs_path}")"
 
   case "${stack}" in
     django) role="api"; confidence="0.88"; evidence=("manage.py") ;;
@@ -203,7 +211,6 @@ _discovery_generic_json() {
     docker)
       role="docker_group"
       confidence="0.75"
-      compose_files="$(_discovery_docker_compose_files_json "${rel_path}" "${abs_path}")"
       if [[ "$(jq 'length' <<< "${compose_files}")" -gt 0 ]]; then
         evidence=("docker compose")
       else
@@ -228,7 +235,7 @@ _discovery_generic_json() {
       service: $service,
       confidence: ($confidence | tonumber),
       score: $score,
-      compose_files: (if $stack == "docker" then $compose_files else [] end),
+      compose_files: $compose_files,
       evidence: $evidence
     }'
 }

@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Discovers runtime service candidates, previews merge with existing manifest/config, and applies discovery-backed service definitions to `.ops.project/config` and `.ops.yaml`.
+Discovers runtime service candidates, previews merge with existing project
+config, and applies discovery-backed service definitions to
+`.ops.project/config`.
 
 ## CLI / entrypoints
 
@@ -17,7 +19,7 @@ Note: the CLI alias `services` maps to subcommand `apply-services` in `setup.sh`
 
 ## Source files
 
-- `core/commands/setup.sh` — `_run_apply_services`, `_run_discovery`, `_write_manifest_from_discovery`, `_materialize_project_config_from_discovery`
+- `core/commands/setup.sh` — `_run_apply_services`, `_run_discovery`, `_materialize_project_config_from_discovery`
 - `core/lib/discovery.sh` — workspace scan
 - `core/probes/` — stack fingerprinting
 
@@ -26,7 +28,8 @@ Note: the CLI alias `services` maps to subcommand `apply-services` in `setup.sh`
 **Reads:**
 
 - Workspace tree (via discovery)
-- Existing `.ops.yaml` and `.ops.project/config/services.json` when present
+- Existing `.ops.project/config/services.json` when present
+- `.ops.yaml` only as compatibility fallback when project config is absent
 
 **Writes (with `--apply`):**
 
@@ -36,7 +39,6 @@ Note: the CLI alias `services` maps to subcommand `apply-services` in `setup.sh`
 | `.ops.project/config/services.json` | Runtime service config |
 | `.ops.project/config/project.json`, `settings.json`, `profiles.json` | From discovery materialization |
 | `.ops.project/generated/setup.json` | Generated setup snapshot |
-| `.ops.yaml` | Merged service list (transitional) |
 
 Preserves confirmed user fields where possible during merge.
 
@@ -44,7 +46,8 @@ Preserves confirmed user fields where possible during merge.
 
 1. Runs discovery scan.
 2. Prints preview of services added/removed/updated.
-3. With `--apply`, materializes config and updates manifest.
+3. With `--apply`, materializes config. Use `ops setup export-yaml --apply`
+   separately when a YAML compatibility export is needed.
 
 Go `process_group` services get process-level decisions via `_resolve_process_decisions_json` during full setup paths.
 

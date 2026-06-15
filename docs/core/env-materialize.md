@@ -12,6 +12,12 @@ Materialize env files when policy requires generating merged output for a servic
 
 May write service-specific env output paths configured in manifest (`env_output_file`, `env_materialization`).
 
+Generated env files are ephemeral and written under:
+
+```text
+.ops.project/generated/env/<service_id>.env
+```
+
 ## See also
 
 - [env.md](env.md)
