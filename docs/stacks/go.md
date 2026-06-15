@@ -38,8 +38,8 @@ Keep project-specific binary logic out of consuming repos; extend `_go_dispatch`
 ## Testing
 
 ```bash
-./ops.sh show start userengine
-./ops.sh start userengine --dry-run
+./ops.sh show start <service_id>
+./ops.sh start <service_id> --dry-run
 ```
 
 ## See also

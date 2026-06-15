@@ -12,7 +12,7 @@ WSL/Windows binary detection, path translation (`wslpath`), and shims for runnin
 
 - Detects WSL and Windows-hosted tools
 - `run_cross_shell_binary` runs Windows executables from WSL with PowerShell + `wslpath` cwd translation
-- `ensure_cross_shell_bin` creates shims in project `.ops/bin/` (on PATH via init)
+- `ensure_cross_shell_bin` creates machine-local shims under `.ops.project/generated/bin/shims/` (on PATH via init)
 - Used by `core/stacks/go.sh` and `core/stacks/node.sh`
 
 ## Do not

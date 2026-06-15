@@ -140,12 +140,12 @@ windows_go_build_linux() {
     < /dev/null
 }
 
-# Create a small shim in .ops/bin that proxies calls to the Windows exe via cmd.exe.
-# Shim path: ${OPS_LOCAL_DIR}/bin/<name>
+# Create a small shim that proxies calls to the Windows exe via cmd.exe.
+# Shim path: ${OPS_PROJECT_BIN}/<name>
 create_windows_shim() {
   local name="${1:?name required}"
   local winpath="${2:?winpath required}"
-  local shim_dir="${OPS_LOCAL_DIR}/bin"
+  local shim_dir="${OPS_PROJECT_BIN:-${OPS_PROJECT_ROOT}/.ops.project/generated/bin/shims}"
   local shim_file="${shim_dir}/${name}"
 
   mkdir -p "${shim_dir}"
@@ -210,7 +210,7 @@ run_cross_shell_binary() {
 }
 
 # Ensure a binary is available: if not present in PATH and we're under WSL,
-# probe Windows and create a shim inside ${OPS_LOCAL_DIR}/bin.
+# probe Windows and create a shim inside ${OPS_PROJECT_BIN}.
 # Returns 0 if binary is available after this call, non-zero otherwise.
 ensure_cross_shell_bin() {
   local name="${1:?name required}"
@@ -227,8 +227,9 @@ ensure_cross_shell_bin() {
   fi
   create_windows_shim "${name}" "${winpath}"
   # Prepend bin dir to PATH if not already present
-  if [[ ":${PATH}:" != *":${OPS_LOCAL_DIR}/bin:"* ]]; then
-    PATH="${OPS_LOCAL_DIR}/bin:${PATH}"
+  local shim_dir="${OPS_PROJECT_BIN:-${OPS_PROJECT_ROOT}/.ops.project/generated/bin/shims}"
+  if [[ ":${PATH}:" != *":${shim_dir}:"* ]]; then
+    PATH="${shim_dir}:${PATH}"
     export PATH
   fi
   return 0

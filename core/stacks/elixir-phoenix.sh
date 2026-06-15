@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # .ops-core/stacks/elixir-phoenix.sh — Elixir/Phoenix (Mix) stack strategy stub.
-# Used by: voice_app service.
 # Phase 3 will implement the full action map (mix phx.server, mix deps.get, etc.)
 
 set -euo pipefail

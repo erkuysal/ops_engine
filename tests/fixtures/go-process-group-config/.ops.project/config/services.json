@@ -1,0 +1,46 @@
+{
+  "version": "1",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "source": "test_fixture",
+  "services": [
+    {
+      "id": "backend",
+      "name": "Backend",
+      "stack": "go",
+      "path": "backend",
+      "role": "process_group",
+      "runner": {
+        "kind": "process_group"
+      },
+      "build": {
+        "output_dir": ".ops.project/generated/bin/backend",
+        "outputs": [
+          { "name": "api", "package": "./cmd/api" },
+          { "name": "gateway", "package": "./cmd/gateway" }
+        ]
+      },
+      "run": {
+        "processes": [
+          { "name": "api" },
+          { "name": "gateway" }
+        ]
+      },
+      "actions": {
+        "start": "",
+        "stop": "",
+        "logs": "",
+        "build": "",
+        "test": "",
+        "lint": ""
+      },
+      "env_files": [],
+      "env_policy": "dev_file",
+      "depends_on": [],
+      "healthcheck": "",
+      "setup": {
+        "command": "",
+        "port": 0
+      }
+    }
+  ]
+}
