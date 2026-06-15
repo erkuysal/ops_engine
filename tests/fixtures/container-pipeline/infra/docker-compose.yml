@@ -1,0 +1,5 @@
+services:
+  backend:
+    image: registry.example.test/demo/sample-backend:${VERSION:-latest}
+  postgres:
+    image: postgres:16-alpine

@@ -18,14 +18,21 @@
 #   ci        — CI/server credential readiness config (LIVE)
 #   ssh       — Simple server SSH connection check (LIVE)
 #   credentials — Local credential readiness check (LIVE)
-#   init      — Interactive manifest wizard (Phase 2)
-#   run       — Single-service action runner (Phase 3)
+#   init      — Interactive manifest wizard (LIVE)
+#   run       — Single-service action runner (LIVE)
 #   show      — Read-only action execution plan inspector (LIVE)
-#   start     — Dependency-aware service start (Phase 4)
-#   stop      — Dependency-aware service stop (Phase 5)
+#   start     — Dependency-aware service start (LIVE)
+#   stop      — Dependency-aware service stop (LIVE)
 #   status    — Service runtime status (LIVE)
-#   logs      — Multiplexed service logs (Phase 5)
-#   update    — Manifest self-healing update (Phase 7)
+#   logs      — Multiplexed service logs (LIVE)
+#   cleanup   — Remove stale generated runtime state (LIVE)
+#   backup    — Snapshot project config (LIVE)
+#   rollback  — Restore project config snapshot (LIVE)
+#   package   — Inspect ops package checkout/install state (LIVE)
+#   monitor   — Lightweight service/infra checks (LIVE)
+#   build     — Native container build/push basics (LIVE)
+#   deploy    — Native remote container deploy basics (LIVE)
+#   update    — Manifest self-healing update (LIVE)
 #   version   — Print orchestrator version
 #   help      — Print this help
 
@@ -60,6 +67,7 @@ Usage: ops <command> [args...]
 
 Commands:
   doctor    Check orchestrator prerequisites  [live]
+            Use 'ops doctor boundaries' for package boundary checks.
   bootstrap Seed .ops.yaml from probe-based workspace discovery [live]
   validate  Manifest validator                [live]
   install   Install/doctor/repair global ops command [live]
@@ -67,14 +75,21 @@ Commands:
   ci        CI/server credential readiness     [live]
   ssh       Simple server SSH connection check [live]
   credentials Local credential readiness check [live]
-  init      Interactive manifest wizard       [Phase 2]
-  run       Single-service action runner      [Phase 3]
+  init      Interactive manifest wizard       [live]
+  run       Single-service action runner      [live]
   show      Show how an action would run       [live]
-  start     Dependency-aware start            [Phase 4]
-  stop      Dependency-aware stop             [Phase 5]
+  start     Dependency-aware start            [live]
+  stop      Dependency-aware stop             [live]
   status    Service runtime status            [live]
-  logs      Multiplexed logs stream           [Phase 5]
-  update    Manifest self-healing update      [Phase 7]
+  logs      Multiplexed logs stream           [live]
+  cleanup   Remove stale runtime state        [live]
+  backup    Snapshot project config           [live]
+  rollback  Restore project config snapshot   [live]
+  package   Inspect ops package state         [live]
+  monitor   Lightweight service/infra checks  [live]
+  build     Native container build/push       [live]
+  deploy    Native remote container deploy    [live]
+  update    Manifest self-healing update      [live]
   env       show/doctor env context           [live]
   version   Print version
   help      Print this help
@@ -102,6 +117,7 @@ ${OPS_BOLD}Usage:${OPS_NC} ${OPS_DIM}./ops.sh <command> [args...]${OPS_NC}
 
 ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_BOLD}doctor${OPS_NC}    Check orchestrator prerequisites     ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_DIM}          doctor boundaries checks package/project separation${OPS_NC}
   ${OPS_BOLD}bootstrap${OPS_NC} Seed .ops.yaml from probe-based discovery ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}validate${OPS_NC}  Manifest validator                   ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}install${OPS_NC}   Install/doctor/repair global command ${OPS_GREEN}[live]${OPS_NC}
@@ -109,14 +125,21 @@ ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_BOLD}ci${OPS_NC}        CI/server credential readiness        ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}ssh${OPS_NC}       Simple server SSH connection check    ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}credentials${OPS_NC} Local credential readiness check     ${OPS_GREEN}[live]${OPS_NC}
-  ${OPS_DIM}init      Interactive manifest wizard          [Phase 2]${OPS_NC}
-  ${OPS_DIM}run       Single-service action runner         [Phase 3]${OPS_NC}
+  ${OPS_BOLD}init${OPS_NC}      Interactive manifest wizard       ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}run${OPS_NC}       Single-service action runner      ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}show${OPS_NC}      Show how an action would run       ${OPS_GREEN}[live]${OPS_NC}
-  ${OPS_DIM}start     Dependency-aware start               [Phase 4]${OPS_NC}
+  ${OPS_BOLD}start${OPS_NC}     Dependency-aware start            ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}status${OPS_NC}    Service runtime status (PIDs)      ${OPS_GREEN}[live]${OPS_NC}
-  ${OPS_DIM}stop      Dependency-aware stop                [Phase 5]${OPS_NC}
-  ${OPS_DIM}logs      Multiplexed logs stream              [Phase 5]${OPS_NC}
-  ${OPS_DIM}update    Manifest self-healing update         [Phase 7]${OPS_NC}
+  ${OPS_BOLD}stop${OPS_NC}      Dependency-aware stop             ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}logs${OPS_NC}      Multiplexed logs stream           ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}cleanup${OPS_NC}   Remove stale runtime state        ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}backup${OPS_NC}    Snapshot project config           ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}rollback${OPS_NC}  Restore project config snapshot   ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}package${OPS_NC}   Inspect ops package state         ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}monitor${OPS_NC}   Lightweight service/infra checks  ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}build${OPS_NC}     Native container build/push       ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}deploy${OPS_NC}    Native remote container deploy    ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}update${OPS_NC}    Manifest self-healing update      ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}env${OPS_NC}       show / doctor env context          ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}version${OPS_NC}   Print version
   ${OPS_BOLD}help${OPS_NC}      Print this help
@@ -228,16 +251,40 @@ case "${COMMAND}" in
     exec bash "${_MAIN_DIR}/commands/logs.sh" "$@"
     ;;
 
+  cleanup)
+    exec bash "${_MAIN_DIR}/commands/cleanup.sh" "$@"
+    ;;
+
+  backup)
+    exec bash "${_MAIN_DIR}/commands/backup.sh" "$@"
+    ;;
+
+  rollback)
+    exec bash "${_MAIN_DIR}/commands/rollback.sh" "$@"
+    ;;
+
+  package)
+    exec bash "${_MAIN_DIR}/commands/package.sh" "$@"
+    ;;
+
+  monitor)
+    exec bash "${_MAIN_DIR}/commands/monitor.sh" "$@"
+    ;;
+
+  build)
+    exec bash "${_MAIN_DIR}/commands/build.sh" "$@"
+    ;;
+
+  deploy)
+    exec bash "${_MAIN_DIR}/commands/deploy.sh" "$@"
+    ;;
+
   update)
     exec bash "${_MAIN_DIR}/commands/update.sh" "$@"
     ;;
 
   env)
     exec bash "${_MAIN_DIR}/commands/env.sh" "$@"
-    ;;
-
-  run)
-    exec bash "${_MAIN_DIR}/commands/run.sh" "$@"
     ;;
 
   *)

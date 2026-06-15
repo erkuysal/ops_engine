@@ -1,0 +1,50 @@
+{
+  "version": "1",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "source": "test_fixture",
+  "services": [
+    {
+      "id": "api",
+      "name": "API",
+      "stack": "go",
+      "path": "backend",
+      "role": "app",
+      "runner": {"kind": "stack"},
+      "build": {
+        "context": "backend",
+        "dockerfile": "backend/Dockerfile"
+      },
+      "actions": {},
+      "env_files": [],
+      "depends_on": [],
+      "setup": {"port": 8080}
+    },
+    {
+      "id": "infra",
+      "name": "Infra",
+      "stack": "docker",
+      "path": "infra",
+      "role": "docker_group",
+      "runner": {"kind": "compose"},
+      "compose_files": ["infra/docker-compose.yml"],
+      "build": {},
+      "actions": {},
+      "env_files": [],
+      "depends_on": [],
+      "setup": {}
+    },
+    {
+      "id": "web",
+      "name": "Web",
+      "stack": "node",
+      "path": "web",
+      "role": "app",
+      "runner": {"kind": "stack"},
+      "build": {},
+      "actions": {},
+      "env_files": [],
+      "depends_on": [],
+      "setup": {}
+    }
+  ]
+}

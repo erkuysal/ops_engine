@@ -1,0 +1,3 @@
+services:
+  frontend:
+    image: registry.example.test/demo/sample-frontend:${VERSION:-latest}

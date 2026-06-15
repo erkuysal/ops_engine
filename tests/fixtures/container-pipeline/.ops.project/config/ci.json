@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "source": "test_fixture",
+  "docker": {
+    "registry": "registry.example.test",
+    "namespace": "demo",
+    "image_prefix": "sample"
+  },
+  "deploy": {
+    "host": "deploy.example.test",
+    "user": "deploy",
+    "path": "/srv/sample",
+    "ssh_key_path": ""
+  },
+  "secrets": {
+    "local_env_file": ".ops.project/secrets/ci.env"
+  }
+}

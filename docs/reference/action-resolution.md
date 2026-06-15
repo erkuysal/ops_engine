@@ -16,7 +16,7 @@ How `ops run` and `ops show` choose a runner for `<action>` on `<service_id>`.
 | 2 | `service_override` | `.ops/commands/<service_id>/<action>.sh` executable |
 | 3 | `global_override` | `.ops/commands/<action>.sh` executable |
 | 4 | `setup_command` | `start` and setup has start command |
-| 5 | `manifest_action` | `.ops.yaml` `actions.<action>` non-empty |
+| 5 | `configured_action` | Project config or YAML fallback `actions.<action>` non-empty |
 | 6 | `stack_default` | Default from `run_plan_stack_default_command` |
 | 7 | `legacy_bridge` | Entry in `scripts/commands.sh` |
 | 8 | `unresolved` | No runner found |
@@ -30,7 +30,7 @@ flowchart TD
   so{service override?}
   go{global override?}
   sc{setup start cmd?}
-  ma{manifest action?}
+  ma{configured action?}
   sd{stack default?}
   leg{legacy script?}
 
@@ -43,7 +43,7 @@ flowchart TD
   go -->|no| sc
   sc -->|yes| setupCmd[setup command]
   sc -->|no| ma
-  ma -->|yes| manifestCmd[manifest via stack]
+  ma -->|yes| configuredCmd[configured action via stack]
   ma -->|no| sd
   sd -->|yes| stackDefault[stack default]
   sd -->|no| leg
