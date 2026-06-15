@@ -91,7 +91,7 @@ manifest_path() {
   printf '%s/.ops.yaml' "$(repo_root)"
 }
 
-# Return the absolute path to .ops/ (local overrides, history, tmp)
+# Return the absolute path to .ops/ (package checkout and optional project-local overrides)
 ops_local_dir() {
   printf '%s/.ops' "$(repo_root)"
 }
@@ -107,15 +107,22 @@ _ops_bootstrap_root() {
   OPS_CORE_ROOT="${OPS_CORE_ROOT:-${OPS_PROJECT_ROOT}/.ops/core}"
   OPS_LOCAL_DIR="${OPS_PROJECT_ROOT}/.ops"
   OPS_MANIFEST="${OPS_PROJECT_ROOT}/.ops.yaml"
+  OPS_PROJECT_STATE_DIR="${OPS_PROJECT_STATE_DIR:-${OPS_PROJECT_ROOT}/.ops.project}"
+  OPS_PROJECT_LOG_DIR="${OPS_PROJECT_LOG_DIR:-${OPS_PROJECT_STATE_DIR}/logs}"
+  OPS_PROJECT_RUN_DIR="${OPS_PROJECT_RUN_DIR:-${OPS_PROJECT_STATE_DIR}/run}"
+  OPS_PROJECT_GENERATED_DIR="${OPS_PROJECT_GENERATED_DIR:-${OPS_PROJECT_STATE_DIR}/generated}"
+  OPS_PROJECT_CONFIG_DIR="${OPS_PROJECT_CONFIG_DIR:-${OPS_PROJECT_STATE_DIR}/config}"
+  OPS_PROJECT_HISTORY_DIR="${OPS_PROJECT_HISTORY_DIR:-${OPS_PROJECT_STATE_DIR}/.history}"
+  OPS_PROFILES_DIR="${OPS_PROFILES_DIR:-${OPS_PROJECT_STATE_DIR}/profiles}"
   export OPS_CORE_ROOT OPS_LOCAL_DIR OPS_MANIFEST
+  export OPS_PROJECT_STATE_DIR OPS_PROJECT_LOG_DIR OPS_PROJECT_RUN_DIR OPS_PROJECT_GENERATED_DIR OPS_PROJECT_CONFIG_DIR OPS_PROJECT_HISTORY_DIR OPS_PROFILES_DIR
 }
 _ops_bootstrap_root
 
-# Ensure local ops bin directory exists and is on PATH (for shims created by cross-shell)
-OPS_PROJECT_BIN="${OPS_LOCAL_DIR}/bin"
-if [[ ! -d "${OPS_PROJECT_BIN}" ]]; then
-  mkdir -p "${OPS_PROJECT_BIN}" 2>/dev/null || true
-fi
+# Ensure generated project bin directory exists and is on PATH (for cross-shell shims).
+# Shims are machine-local runtime artifacts, so they belong in .ops.project rather than
+# the package checkout under .ops/.
+OPS_PROJECT_BIN="${OPS_PROJECT_BIN:-${OPS_PROJECT_ROOT}/.ops.project/generated/bin/shims}"
 if [[ ":${PATH}:" != *":${OPS_PROJECT_BIN}:"* ]]; then
   PATH="${OPS_PROJECT_BIN}:${PATH}"
   export PATH
@@ -182,7 +189,7 @@ debug() {
 # ============================================================================
 # LOCKFILE HELPER — prevent concurrent mutating commands (init, update)
 # ============================================================================
-OPS_LOCK_FILE="${OPS_LOCAL_DIR}/.lock"
+OPS_LOCK_FILE="${OPS_LOCK_FILE:-${OPS_PROJECT_RUN_DIR}/ops.lock}"
 
 # Acquire the ops lock. Call at the start of any mutating command.
 # Usage: ops_lock_acquire "command-name"

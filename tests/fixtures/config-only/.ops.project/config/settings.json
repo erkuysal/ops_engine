@@ -1,0 +1,16 @@
+{
+  "version": "1",
+  "settings": {
+    "run": {
+      "default_mode": "foreground"
+    },
+    "start": {
+      "mode": "background",
+      "with_deps": true
+    }
+  },
+  "setup": {
+    "python_manager": "",
+    "python_env": ""
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "version": "1",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "source": "test_fixture",
+  "services": [
+    {
+      "id": "api",
+      "name": "API",
+      "stack": "go",
+      "path": "backend",
+      "role": "app",
+      "confidence": 0.9,
+      "evidence": ["go.mod"],
+      "runner": {
+        "kind": "stack"
+      },
+      "build": {
+        "outputs": []
+      },
+      "run": {},
+      "actions": {
+        "start": "",
+        "stop": "",
+        "logs": "",
+        "build": "",
+        "test": "",
+        "lint": ""
+      },
+      "env_files": [],
+      "env_policy": "dev_file",
+      "env_materialization": "none",
+      "env_output_file": "",
+      "depends_on": [],
+      "healthcheck": "http://127.0.0.1:8080/health",
+      "setup": {
+        "command": "go run .",
+        "env_files": [],
+        "port": 8080,
+        "runtime": ""
+      },
+      "meta": {
+        "source": "test_fixture",
+        "confirmed_by_user": true
+      }
+    }
+  ]
+}

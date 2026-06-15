@@ -1,0 +1,8 @@
+{
+  "version": "1",
+  "profiles": {
+    "local": {
+      "description": "Local development"
+    }
+  }
+}

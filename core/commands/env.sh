@@ -46,7 +46,7 @@ Flags:
 Examples:
   ./ops.sh experimental env show backend
   ./ops.sh experimental env show --all --unmask
-  ./ops.sh experimental env doctor voice_app
+  ./ops.sh experimental env doctor <service-id>
   OPS_CI=true ./ops.sh experimental env show backend
 EOF
   else

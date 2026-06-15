@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .ops/core/commands/update.sh - Compatibility wrapper for setup apply-services.
+# .ops/core/commands/update.sh - Compatibility wrapper for setup.
 
 set -euo pipefail
 
@@ -17,10 +17,10 @@ for _arg in "$@"; do
 Usage: ops update [--apply]
 
 Compatibility wrapper for:
-  ops setup apply-services
-  ops setup apply-services --apply
+  ops setup --dry-run
+  ops setup --apply
 
-`setup apply-services` now owns discovery-backed service merging.
+`setup` now owns discovery-backed config refresh.
 EOF
       exit 0
       ;;
@@ -29,10 +29,10 @@ EOF
 done
 
 ops_section "ops update"
-ops_info "update is now handled by setup apply-services."
+ops_info "update is now handled by config-first setup."
 
 if [[ "${APPLY}" == "true" ]]; then
-  exec bash "${_SELF_DIR}/setup.sh" apply-services --apply
+  exec bash "${_SELF_DIR}/setup.sh" --apply
 fi
 
-exec bash "${_SELF_DIR}/setup.sh" apply-services
+exec bash "${_SELF_DIR}/setup.sh" --dry-run

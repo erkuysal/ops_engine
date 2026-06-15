@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-# .ops-core/commands/validate.sh — Four-pass manifest validator.
+# .ops-core/commands/validate.sh — Project config validator.
 #
 # Passes:
-#   1) Syntax    — yq can parse .ops.yaml without error
-#   2) Structural — required top-level keys + types
-#   3) Semantic  — duplicate IDs, unknown stacks, depends_on refs, env_policy values
-#   4) Filesystem — service paths exist, env_files exist when policy requires them
+#   Config source: direct JSON validation for .ops.project/config.
+#   YAML source: compatibility validation for .ops.yaml when config is absent.
 #
 # Diagnostics are collected throughout all passes and printed grouped by severity.
 # Exit codes:
 #   0   validation passed (may have warnings/hints)
 #   1   one or more ERRORs found
-#   2   config error (missing .ops.yaml or yq)
+#   2   config error (missing project config or required tools)
 #
 # Usage: ./ops.sh experimental validate [--plain]
 
@@ -39,7 +37,7 @@ for _arg in "$@"; do
     --plain)   OPS_PLAIN=true ;;
     --help|-h)
       printf 'Usage: ./ops.sh experimental validate [--plain]\n'
-      printf 'Validates .ops.yaml or .ops.project/config through a validation pipeline.\n'
+      printf 'Validates .ops.project/config, falling back to .ops.yaml only when config is absent.\n'
       printf 'Exit 0 = passed (warnings OK), exit 1 = errors found.\n'
       exit 0
       ;;
@@ -51,13 +49,13 @@ done
 require_bins yq jq
 
 VALIDATE_CONFIG_ONLY=false
-if manifest_exists; then
+if project_config_services_exists; then
+  VALIDATE_CONFIG_ONLY=true
+elif manifest_exists; then
   manifest_prepare_validation_source
   trap manifest_cleanup_validation_source EXIT
-elif project_config_services_exists; then
-  VALIDATE_CONFIG_ONLY=true
 else
-  die "Nothing to validate. Run ops setup --apply or create .ops.yaml." 2
+  die "Nothing to validate. Run ops setup --apply or import a compatibility .ops.yaml." 2
 fi
 
 # ── Diagnostic collector ──────────────────────────────────────────────────────
@@ -330,11 +328,19 @@ _pass5_overrides() {
   fi
 
   if settings_exists && ! settings_validate >/dev/null 2>&1; then
-    _err "Settings — invalid .ops.yaml settings section"
+    if [[ "${VALIDATE_CONFIG_ONLY}" == "true" ]]; then
+      _err "Settings — invalid .ops.project/config/settings.json settings section"
+    else
+      _err "Settings — invalid .ops.yaml settings section"
+    fi
   fi
 
   if setup_exists && ! setup_validate >/dev/null 2>&1; then
-    _err "Setup — invalid .ops.yaml setup section"
+    if [[ "${VALIDATE_CONFIG_ONLY}" == "true" ]]; then
+      _err "Setup — invalid .ops.project/config/settings.json setup section"
+    else
+      _err "Setup — invalid .ops.yaml setup section"
+    fi
   fi
 
   local profile_name
@@ -368,16 +374,8 @@ if [[ "${VALIDATE_CONFIG_ONLY}" == "true" ]]; then
   ops_step 1 2 "Config validation (JSON structure, semantics, filesystem)"
   config_validate_run _err _warn _hint
   _pass5_overrides
-elif [[ "${MANIFEST_VALIDATE_TEMP:-false}" == "true" ]]; then
-  ops_info "Source: .ops.project/config (temporary manifest for validation)"
-  printf '\n'
-  _pass1_syntax
-  _pass2_structural
-  _pass3_semantic
-  _pass4_filesystem
-  _pass5_overrides
 else
-  ops_info "Manifest: ${OPS_MANIFEST}"
+  ops_info "Source: .ops.yaml compatibility manifest"
   printf '\n'
   _pass1_syntax
   _pass2_structural

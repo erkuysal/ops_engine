@@ -2,11 +2,16 @@
 # Status command smoke tests.
 
 suite_status() {
-  local root json
+  local root json output
 
   root="$(fixture_copy config-only)"
   assert_ok "status all services" \
     ops_run "${root}" status --plain
+  output="$(ops_run "${root}" status --plain)"
+  case "${output}" in
+    *"project config source: .ops.project/config/services.json"*) assert_eq "status labels project config source" "true" "true" ;;
+    *) assert_eq "status labels project config source" "true" "false" ;;
+  esac
   assert_ok "status single service" \
     ops_run "${root}" status api --plain
   assert_ok "ps alias" \

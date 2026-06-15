@@ -155,7 +155,7 @@ env_assemble_context() {
     fi
     require_within_root "$(dirname "${abs_gef}")"
     _env_load_file "${abs_gef}" "global:${gef}"
-  done < <(manifest_get_field '.project.global_env_files[]?' 2>/dev/null || true)
+  done < <(project_global_env_files)
 
   # Layer 3: service.env_files
   local ef
@@ -254,7 +254,7 @@ env_show_context() {
   local n="${#OPS_ENV_CONTEXT[@]}"
   if [[ "${n}" -eq 0 ]]; then
     ops_info "  No env keys loaded from file layers for '${service_id}'."
-    ops_info "  Add env_files to the service or project.global_env_files in .ops.yaml"
+    ops_info "  Add env_files to the service or global_env_files to .ops.project/config/project.json"
     return 0
   fi
 
@@ -301,7 +301,7 @@ env_doctor_check() {
     else
       ops_ok    "  global_env_files — ok: '${gef}'"
     fi
-  done < <(manifest_get_field '.project.global_env_files[]?' 2>/dev/null || true)
+  done < <(project_global_env_files)
 
   # Service env_files
   local ef
@@ -334,7 +334,7 @@ env_doctor_check() {
   # No files declared at any layer (and policy requires them)
   if [[ "${policy}" == "dev_file" ]]; then
     local global_count svc_count
-    global_count="$(manifest_get_field '.project.global_env_files | length' 2>/dev/null || echo 0)"
+    global_count="$(project_global_env_file_count)"
     svc_count="$(manifest_get_service_field "${service_id}" 'env_files | length' 2>/dev/null || echo 0)"
     if [[ "${global_count}" == "0" && ("${svc_count}" == "0" || -z "${svc_count}") ]]; then
       ops_warn "  No env files declared at any layer (env_policy=dev_file but no files configured)"

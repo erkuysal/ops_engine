@@ -5,6 +5,10 @@
 # All functions that read the manifest call require_manifest first.
 # yq is called lazily — install it before using validate/bootstrap.
 
+# Compatibility boundary:
+# - manifest_* names remain for legacy callers.
+# - project_* aliases are preferred for new config-first runtime code.
+# - require_manifest is for explicit YAML compatibility paths only.
 set -euo pipefail
 if [[ "${_OPS_CORE_MANIFEST_LOADED:-}" == "1" ]]; then return 0; fi
 _OPS_CORE_MANIFEST_LOADED=1
@@ -61,6 +65,10 @@ project_config_services_exists() {
   [[ -f "${OPS_PROJECT_CONFIG_SERVICES_FILE}" ]]
 }
 
+project_config_exists() {
+  project_config_services_exists
+}
+
 # Abort with a helpful message if .ops.yaml does not exist.
 require_manifest() {
   if ! manifest_exists; then
@@ -71,7 +79,7 @@ require_manifest() {
   fi
 }
 
-# Prefer .ops.yaml; fall back to exporting config to a temp manifest for validation.
+# Prepare .ops.yaml as a compatibility validation source.
 manifest_prepare_validation_source() {
   if manifest_exists; then
     MANIFEST_VALIDATE_SOURCE="${OPS_MANIFEST}"
@@ -79,20 +87,7 @@ manifest_prepare_validation_source() {
     export MANIFEST_VALIDATE_SOURCE MANIFEST_VALIDATE_TEMP
     return 0
   fi
-  if project_config_services_exists; then
-    require_bins jq yq
-    # shellcheck source=manifest_sync.sh
-    source "${OPS_CORE_ROOT}/lib/manifest_sync.sh"
-    local tmp="${OPS_PROJECT_STATE_DIR}/.validate-manifest.yaml"
-    ensure_dir "${OPS_PROJECT_STATE_DIR}"
-    manifest_json_from_project_config | yq e -P - > "${tmp}"
-    MANIFEST_VALIDATE_SOURCE="${tmp}"
-    MANIFEST_VALIDATE_TEMP=true
-    OPS_MANIFEST="${tmp}"
-    export MANIFEST_VALIDATE_SOURCE MANIFEST_VALIDATE_TEMP OPS_MANIFEST
-    return 0
-  fi
-  die "Nothing to validate. Run ops setup --apply or create .ops.yaml." 2
+  die "No .ops.yaml compatibility manifest found at '${OPS_MANIFEST}'." 2
 }
 
 manifest_cleanup_validation_source() {
@@ -107,6 +102,10 @@ require_manifest_or_config() {
     return 0
   fi
   require_manifest
+}
+
+project_require_config_or_yaml() {
+  require_manifest_or_config
 }
 
 # Return 0 if a service with the given ID is declared in the manifest.
@@ -124,6 +123,10 @@ manifest_service_exists() {
   [[ -n "${result}" ]]
 }
 
+project_service_exists() {
+  manifest_service_exists "$@"
+}
+
 # ============================================================================
 # PROJECT-LEVEL ACCESSORS
 # ============================================================================
@@ -133,8 +136,40 @@ manifest_service_exists() {
 # Usage: manifest_get_project_field global_env_files
 manifest_get_project_field() {
   local field="${1:?manifest_get_project_field: field required}"
+  if [[ -f "${OPS_PROJECT_CONFIG_PROJECT_FILE}" ]]; then
+    require_bins jq
+    jq -r --arg field "${field}" '
+      def getpathstr($path):
+        getpath($path | split(".") | map(if test("^[0-9]+$") then tonumber else . end));
+      getpathstr($field) // ""
+    ' "${OPS_PROJECT_CONFIG_PROJECT_FILE}" 2>/dev/null || true
+    return 0
+  fi
   require_manifest
   _manifest_yq_or_empty ".project.${field}"
+}
+
+project_get_field() {
+  manifest_get_project_field "$@"
+}
+
+# Print project global env files, one item per line, preferring .ops.project/config.
+project_global_env_files() {
+  if [[ -f "${OPS_PROJECT_CONFIG_PROJECT_FILE}" ]]; then
+    require_bins jq
+    jq -r '.global_env_files[]?' "${OPS_PROJECT_CONFIG_PROJECT_FILE}" 2>/dev/null || true
+    return 0
+  fi
+  manifest_get_field '.project.global_env_files[]?' 2>/dev/null || true
+}
+
+project_global_env_file_count() {
+  if [[ -f "${OPS_PROJECT_CONFIG_PROJECT_FILE}" ]]; then
+    require_bins jq
+    jq -r '(.global_env_files // []) | length' "${OPS_PROJECT_CONFIG_PROJECT_FILE}" 2>/dev/null || printf '0'
+    return 0
+  fi
+  manifest_get_field '.project.global_env_files | length' 2>/dev/null || printf '0'
 }
 
 # ============================================================================
@@ -150,6 +185,10 @@ manifest_list_services() {
   fi
   require_manifest
   _manifest_yq '.services[].id'
+}
+
+project_list_services() {
+  manifest_list_services "$@"
 }
 
 # ============================================================================
@@ -180,6 +219,10 @@ manifest_get_service_field() {
   _manifest_yq_or_empty ".services[] | select(.id == \"${id}\") | .${field}"
 }
 
+project_get_service_field() {
+  manifest_get_service_field "$@"
+}
+
 # Get a list field from a specific service, one item per line.
 # Usage: manifest_get_service_list_field backend depends_on
 # Usage: manifest_get_service_list_field backend env_files
@@ -203,6 +246,10 @@ manifest_get_service_list_field() {
   fi
   require_manifest
   _manifest_yq ".services[] | select(.id == \"${id}\") | .${field}[]?" 2>/dev/null || true
+}
+
+project_get_service_list_field() {
+  manifest_get_service_list_field "$@"
 }
 
 # ============================================================================

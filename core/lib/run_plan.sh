@@ -101,7 +101,7 @@ run_plan_generate_json() {
   local setup_profile setup_cmd setup_port setup_runtime
   local run_mode start_mode start_with_deps start_preview_enabled
   local start_preview_lines start_preview_wait python_activation
-  local config_source compatibility_manifest stack_default legacy_target
+  local config_source compatibility_export stack_default legacy_target
   local selected_kind selected_cmd selected_strategy selected_cwd
   local build_output_dir build_target_os build_target_arch
   local service_override_exists service_override_executable
@@ -137,10 +137,10 @@ run_plan_generate_json() {
 
   if project_config_services_exists; then
     config_source="${OPS_PROJECT_CONFIG_SERVICES_FILE#${OPS_PROJECT_ROOT}/}"
-    compatibility_manifest="${OPS_MANIFEST#${OPS_PROJECT_ROOT}/}"
+    compatibility_export="${OPS_MANIFEST#${OPS_PROJECT_ROOT}/}"
   else
     config_source="${OPS_MANIFEST#${OPS_PROJECT_ROOT}/}"
-    compatibility_manifest=""
+    compatibility_export=""
   fi
 
   stack_default=""
@@ -184,9 +184,9 @@ run_plan_generate_json() {
     selected_cmd="${setup_cmd}"
     selected_strategy="setup_command"
   elif [[ -n "${explicit_cmd}" && "${explicit_cmd}" != "null" ]]; then
-    selected_kind="manifest action via stack dispatcher"
+    selected_kind="configured action via stack dispatcher"
     selected_cmd="${explicit_cmd}"
-    selected_strategy="manifest_action"
+    selected_strategy="configured_action"
   elif [[ -n "${stack_default}" ]]; then
     selected_kind="stack default"
     selected_cmd="${stack_default}"
@@ -213,7 +213,7 @@ run_plan_generate_json() {
     --arg project_root "${OPS_PROJECT_ROOT}" \
     --arg state_dir "${OPS_PROJECT_STATE_DIR}" \
     --arg config_source "${config_source}" \
-    --arg compatibility_manifest "${compatibility_manifest}" \
+    --arg compatibility_export "${compatibility_export}" \
     --arg action "${action}" \
     --arg requested_mode "${mode}" \
     --arg run_mode "${run_mode}" \
@@ -265,7 +265,7 @@ run_plan_generate_json() {
         root: $project_root,
         state_dir: $state_dir,
         config_source: $config_source,
-        compatibility_manifest: $compatibility_manifest
+        compatibility_export: $compatibility_export
       },
       action: {
         name: $action,
@@ -317,7 +317,7 @@ run_plan_generate_json() {
             function: $stack_dispatch_func,
             default_command: $stack_default
           },
-          manifest_action: $explicit_cmd,
+          configured_action: $explicit_cmd,
           legacy_bridge: $legacy_target
         },
         selected: {

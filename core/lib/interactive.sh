@@ -126,6 +126,45 @@ interactive_prompt() {
   fi
 }
 
+interactive_secret_prompt() {
+  local prompt="$1"
+  local default_marker="${2:-empty}"
+
+  interactive_require_tty
+
+  local reply
+  printf '%s [%s]: ' "${prompt}" "${default_marker}" > /dev/tty
+  stty -echo < /dev/tty 2>/dev/null || true
+  read -r reply < /dev/tty || reply=""
+  stty echo < /dev/tty 2>/dev/null || true
+  printf '\n' > /dev/tty
+  printf '%s' "${reply}"
+}
+
+interactive_port_prompt() {
+  local prompt="$1" default="${2:-0}" reply
+  while true; do
+    reply="$(interactive_prompt "${prompt}" "${default}")"
+    if [[ "${reply}" =~ ^[0-9]+$ && "${reply}" -ge 0 && "${reply}" -le 65535 ]]; then
+      printf '%s' "${reply}"
+      return 0
+    fi
+    printf 'Please enter a numeric port between 0 and 65535.\n' > /dev/tty
+  done
+}
+
+interactive_env_name_prompt() {
+  local prompt="$1" default="${2:-}" reply
+  while true; do
+    reply="$(interactive_prompt "${prompt}" "${default}")"
+    if [[ -z "${reply}" || "${reply}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      printf '%s' "${reply}"
+      return 0
+    fi
+    printf 'Please enter a valid environment variable name.\n' > /dev/tty
+  done
+}
+
 # ============================================================================
 # LIST PROMPT (space-separated, validated)
 # ============================================================================
@@ -133,7 +172,7 @@ interactive_prompt() {
 # Prompt for a space-separated list of IDs, validated against a known set.
 # Prints the validated reply to stdout (may be empty).
 #
-# Usage:   deps="$(interactive_list_prompt "depends_on" "backend voice_app go" "")"
+# Usage:   deps="$(interactive_list_prompt "depends_on" "api worker web" "")"
 interactive_list_prompt() {
   local prompt="$1"
   local valid_ids="$2"      # space-separated list of valid IDs

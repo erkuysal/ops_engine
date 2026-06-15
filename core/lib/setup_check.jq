@@ -14,6 +14,7 @@ def proposed_svc($dir):
     path,
     role,
     runner_kind: runner_kind_for_role(.role),
+    compose_files: norm_files(.compose_files),
     env_files: norm_files(.env_files),
     port: (($proposed_setup[0].services[.id].port // 0) | tonumber),
     command: ($proposed_setup[0].services[.id].command // "")
@@ -26,6 +27,7 @@ def current_svc($svc):
     path,
     role,
     runner_kind: (.runner.kind // "stack"),
+    compose_files: norm_files(.compose_files),
     env_files: norm_files(.env_files // .setup.env_files),
     port: ((.setup.port // 0) | tonumber),
     command: (.setup.command // "")
@@ -44,6 +46,7 @@ def cache_stale:
           or $d.stack != $old.stack
           or $d.path != $old.path
           or $d.role != $old.role
+          or norm_files($d.compose_files) != norm_files($old.compose_files)
       )
     )
   );
@@ -68,6 +71,7 @@ def cache_stale:
               or $p.path != $c.path
               or $p.role != $c.role
               or ($p.runner_kind != $c.runner_kind)
+              or ($p.compose_files != $c.compose_files)
               or ($p.env_files != $c.env_files)
               or ($p.port != $c.port)
               or (($p.command // "") != ($c.command // ""))
@@ -94,6 +98,7 @@ def cache_stale:
               (if $p.path != $c.path then {name: "path", current: $c.path, proposed: $p.path} else empty end),
               (if $p.role != $c.role then {name: "role", current: $c.role, proposed: $p.role} else empty end),
               (if $p.runner_kind != $c.runner_kind then {name: "runner_kind", current: $c.runner_kind, proposed: $p.runner_kind} else empty end),
+              (if $p.compose_files != $c.compose_files then {name: "compose_files", current: $c.compose_files, proposed: $p.compose_files} else empty end),
               (if $p.env_files != $c.env_files then {name: "env_files", current: $p.env_files, proposed: $p.env_files} else empty end),
               (if $p.port != $c.port then {name: "port", current: $c.port, proposed: $p.port} else empty end),
               (if ($p.command // "") != ($c.command // "") then {name: "command", current: $c.command, proposed: $p.command} else empty end)

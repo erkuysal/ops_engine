@@ -25,7 +25,7 @@ Usage: ops status [service_id] [--json]
 Show runtime status for one service or all configured services.
 
 Reads PID files under .ops.project/run/ and service metadata from
-.ops.project/config (or .ops.yaml).
+.ops.project/config, with .ops.yaml only as a compatibility fallback.
 
 States:
   running   All tracked processes are alive
@@ -85,7 +85,7 @@ if [[ -n "${TARGET}" ]]; then
 else
   ops_info "All services"
 fi
-printf '  config: %s\n\n' "$(status_config_source_rel)"
+printf '  project config source: %s\n\n' "$(status_config_source_rel)"
 
 _print_row() {
   local svc_id="$1"

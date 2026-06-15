@@ -7,11 +7,13 @@ _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
 source "${_SELF_DIR}/../lib/manifest.sh"
+source "${_SELF_DIR}/../lib/settings.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
 source "${_SELF_DIR}/../lib/discovery.sh"
 source "${_SELF_DIR}/../lib/backup.sh"
 source "${_SELF_DIR}/../lib/setup_check.sh"
 source "${_SELF_DIR}/../lib/runner.sh"
+source "${_SELF_DIR}/../lib/run_plan.sh"
 
 SUBCMD=""
 PROFILE=""
@@ -23,6 +25,7 @@ CONFIRM_INFERRED=false
 JSON_OUTPUT=false
 MODULE=""
 EXPLICIT_SETUP_TARGET=false
+RUN_PLAN_ACTIONS=""
 
 _usage_setup() {
   cat <<'EOF'
@@ -37,6 +40,7 @@ Usage: ops setup
        ops setup discover [--apply]
        ops setup apply-services [--apply]
        ops setup dependencies [--interactive] [--apply]
+       ops setup run-plans [--apply] [--action=ACTION] [--actions=a,b]
        ops setup export-yaml [--apply]
        ops setup import-yaml [--apply]
        ops setup show [--profile NAME]
@@ -49,14 +53,15 @@ Setup modules:
   project       Base .ops.project directories and project config only.
   services      Discovery-backed services/config apply path.
   dependencies  Dependency decision preview/interview/apply.
+  run-plans    Regenerate run-plan JSON artifacts from current config.
   ci            CI/server local env/config setup.
 
 Generates project memory under .ops.project/config by default.
-Use --export-yaml --apply to also write or refresh .ops.yaml (optional compatibility export).
+Use --export-yaml --apply to write or refresh .ops.yaml as an optional compatibility export.
 
 Generates and validates project setup values:
   .ops.project/config project memory files
-  .ops.yaml (optional; ops setup export-yaml --apply)
+  .ops.yaml compatibility export (optional; ops setup export-yaml --apply)
   .ops.project/config/decisions.json interactive/default setup decisions
   .ops.project/generated/discovery.json workspace discovery cache
   .ops.project/generated/project_structure.json and project_values.json metadata
@@ -95,7 +100,7 @@ if [[ $# -gt 0 ]]; then
       INTERACTIVE=true
       shift
       ;;
-    discover|apply-services|dependencies|export-yaml|import-yaml|show|check|doctor|help|--help|-h)
+    discover|apply-services|dependencies|run-plans|export-yaml|import-yaml|show|check|doctor|help|--help|-h)
       EXPLICIT_SETUP_TARGET=true
       SUBCMD="$1"
       shift
@@ -103,7 +108,8 @@ if [[ $# -gt 0 ]]; then
   esac
 fi
 
-for _arg in "$@"; do
+while [[ $# -gt 0 ]]; do
+  _arg="$1"
   case "${_arg}" in
     --dry-run) DRY_RUN=true ;;
     --apply) APPLY=true ;;
@@ -112,6 +118,11 @@ for _arg in "$@"; do
     --confirm-inferred) CONFIRM_INFERRED=true ;;
     --check) EXPLICIT_SETUP_TARGET=true; SUBCMD="check" ;;
     --json) JSON_OUTPUT=true ;;
+    --action=*) RUN_PLAN_ACTIONS="${RUN_PLAN_ACTIONS} ${_arg#*=}" ;;
+    --actions=*) RUN_PLAN_ACTIONS="${RUN_PLAN_ACTIONS} ${_arg#*=}" ;;
+    --action|--actions)
+      die "${_arg} requires ${_arg}=name or ${_arg}=a,b form" 2
+      ;;
     --all|-all) EXPLICIT_SETUP_TARGET=true; SUBCMD="generate" ;;
     --module=*) EXPLICIT_SETUP_TARGET=true; MODULE="${_arg#*=}" ;;
     --module)
@@ -119,7 +130,9 @@ for _arg in "$@"; do
       ;;
     --profile=*) PROFILE="${_arg#*=}" ;;
     --profile)
-      die "--profile requires --profile=name form for now" 2
+      shift
+      [[ $# -gt 0 && "${1}" != --* ]] || die "--profile requires a profile name" 2
+      PROFILE="$1"
       ;;
     --help|-h)
       _usage_setup
@@ -127,12 +140,13 @@ for _arg in "$@"; do
       ;;
     *) die "Unknown flag: ${_arg}. Use --help." ;;
   esac
+  shift
 done
 
 if [[ -n "${MODULE}" ]]; then
   case "${MODULE}" in
     all) SUBCMD="generate" ;;
-    project|ci|dependencies) SUBCMD="${MODULE}" ;;
+    project|ci|dependencies|run-plans) SUBCMD="${MODULE}" ;;
     services) SUBCMD="apply-services" ;;
     *) die "Unknown setup module: ${MODULE}" 2 ;;
   esac
@@ -141,6 +155,8 @@ fi
 [[ -z "${SUBCMD}" ]] && SUBCMD="generate"
 [[ "${SUBCMD}" == "help" || "${SUBCMD}" == "--help" || "${SUBCMD}" == "-h" ]] && { _usage_setup; exit 0; }
 [[ -z "${PROFILE}" ]] && PROFILE="$(setup_default_profile)"
+OPS_SETUP_PROFILE="${PROFILE}"
+export OPS_SETUP_PROFILE
 
 if [[ "${EXPLICIT_SETUP_TARGET}" == "false" && "${DRY_RUN}" == "false" && "${INTERACTIVE}" == "true" ]]; then
   SUBCMD="wizard"
@@ -1029,9 +1045,24 @@ _generate_setup_json_from_discovery() {
   fi
   if [[ "${existing_json}" != "{}" ]]; then
     jq -n \
+      --arg profile "${PROFILE}" \
       --argjson proposed "${proposed_json}" \
       --argjson existing "${existing_json}" \
       '
+        def profile_env_files($profile):
+          map(select(
+            (split("/")[-1]) as $name
+            | if $profile == "staging" then
+                ($name | test("^\\.env\\.(production|prod)$|^\\.(production|prod)\\.env$") | not)
+              elif ($profile == "production" or $profile == "prod") then
+                ($name | test("^\\.env\\.staging$|^\\.staging\\.env$") | not)
+              else
+                ($name | test("^\\.env\\.(staging|production|prod)$|^\\.(staging|production|prod)\\.env$") | not)
+              end
+          ));
+        def append_new($base; $extra):
+          reduce $extra[] as $item
+            ($base; if index($item) then . else . + [$item] end);
         $proposed
         | .default_profile = ($existing.default_profile // .default_profile)
         | .scaffold = ($existing.scaffold // .scaffold)
@@ -1049,8 +1080,17 @@ _generate_setup_json_from_discovery() {
                      | if ($existing_port | tonumber) > 0 then $existing_port else $proposed_port end
                    )
                  | .env_files = (
-                     ($existing.services[$id].env_files // []) as $existing_env
-                     | if ($existing_env | length) > 0 then $existing_env else ($proposed.services[$id].env_files // []) end
+                     (($existing.services[$id].env_files // []) | profile_env_files($profile)) as $existing_env
+                     | (($proposed.services[$id].env_files // []) | profile_env_files($profile)) as $proposed_env
+                     | if ($existing_env | length) > 0 then
+                         if ($profile == "staging" or $profile == "production" or $profile == "prod") then
+                           append_new($existing_env; $proposed_env)
+                         else
+                           $existing_env
+                         end
+                       else
+                         $proposed_env
+                       end
                    )
                ))
           )
@@ -1116,10 +1156,26 @@ _generate_services_config_json_from_discovery() {
 
   jq \
     --arg generated_at "$(ops_timestamp)" \
+    --arg profile "${PROFILE}" \
     --argjson setup "${setup_json}" \
     --argjson existing_services "${existing_services_json}" \
     --argjson decisions "${decisions_json}" \
-    '{
+    '
+      def profile_env_files($profile):
+        map(select(
+          (split("/")[-1]) as $name
+          | if $profile == "staging" then
+              ($name | test("^\\.env\\.(production|prod)$|^\\.(production|prod)\\.env$") | not)
+            elif ($profile == "production" or $profile == "prod") then
+              ($name | test("^\\.env\\.staging$|^\\.staging\\.env$") | not)
+            else
+              ($name | test("^\\.env\\.(staging|production|prod)$|^\\.(staging|production|prod)\\.env$") | not)
+            end
+        ));
+      def append_new($base; $extra):
+        reduce $extra[] as $item
+          ($base; if index($item) then . else . + [$item] end);
+    {
       version: "1",
       generated_at: $generated_at,
       source: "setup_discovery",
@@ -1151,9 +1207,15 @@ _generate_services_config_json_from_discovery() {
                 end
             ),
             env_files: (
-              [($existing_services[]? | select(.id == $directory.id) | .env_files)][0] as $existing
-              | if ($existing | type) == "array" and ($existing | length) > 0 then $existing
-                else ($directory.env_files // $setup.services[$directory.id].env_files // [])
+              (([($existing_services[]? | select(.id == $directory.id) | .env_files)][0] // []) | profile_env_files($profile)) as $existing
+              | (($directory.env_files // $setup.services[$directory.id].env_files // []) | profile_env_files($profile)) as $proposed
+              | if ($existing | type) == "array" and ($existing | length) > 0 then
+                  if ($profile == "staging" or $profile == "production" or $profile == "prod") then
+                    append_new($existing; $proposed)
+                  else
+                    $existing
+                  end
+                else $proposed
                 end
             ),
             env_policy: (
@@ -1323,14 +1385,6 @@ _manifest_services_json_from_config() {
     ' <<< "${services_config}"
 }
 
-_write_manifest_from_discovery() {
-  local discovery_json="$1" setup_json="$2" profile_json="$3" decisions_json="${4:-}"
-
-  _generate_manifest_json_from_discovery "${discovery_json}" "${setup_json}" "${profile_json}" "${decisions_json}" |
-    yq e -P - > "${OPS_MANIFEST}"
-  ops_ok "Created .ops.yaml from discovery"
-}
-
 _print_discovery_preview() {
   local discovery_json="$1"
 
@@ -1468,11 +1522,11 @@ _run_discovery() {
 _print_discovery_config_proposal() {
   local discovery_json="$1"
 
-  printf '\nProposed .ops.yaml services from discovery:\n'
+  printf '\nProposed project config services from discovery:\n'
   printf 'services:\n'
   _discovery_services_yaml "${discovery_json}"
 
-  printf '\nProposed .ops.yaml setup from discovery:\n'
+  printf '\nProposed setup config from discovery:\n'
   _generate_setup_json_from_discovery "${discovery_json}" | yq e -P -
 }
 
@@ -1561,7 +1615,7 @@ _run_apply_services() {
   if [[ "${EXPORT_YAML}" == "true" ]]; then
     _sync_yaml_if_requested
   else
-    ops_info "Config updated. Use --export-yaml --apply to sync .ops.yaml."
+    ops_info "Project config updated. Use --export-yaml --apply only if you need the YAML compatibility export."
   fi
 }
 
@@ -1671,14 +1725,11 @@ _materialize_project_structure_reference() {
 
   mkdir -p "${OPS_PROJECT_GENERATED_DIR}"
 
-  local backend_json frontend_json
-  local backend_idx frontend_idx
-  backend_json='{}'
-  frontend_json='{}'
-  backend_idx=0
-  frontend_idx=0
+  local services_json groups_json
+  services_json='[]'
+  groups_json='{}'
 
-  local id name path key
+  local id name path group
   while IFS= read -r id; do
     [[ -z "${id}" || "${id}" == "null" ]] && continue
     name="$(manifest_get_service_field "${id}" name)"
@@ -1686,46 +1737,43 @@ _materialize_project_structure_reference() {
     [[ -z "${path}" || "${path}" == "null" ]] && continue
     [[ -z "${name}" || "${name}" == "null" ]] && name="${id}"
 
-    if [[ "${path}" == BACKENDs/* ]]; then
-      backend_idx=$((backend_idx + 1))
-      key="backend_${backend_idx}"
-      backend_json="$(jq \
-        --arg key "${key}" \
-        --arg name "${name}" \
-        --arg folder "${id}" \
-        --arg path "${path}" \
-        '. + {($key): {name: $name, folder: $folder, path: $path}}' \
-        <<< "${backend_json}")"
-    elif [[ "${path}" == frontend/* ]]; then
-      frontend_idx=$((frontend_idx + 1))
-      key="frontend_${frontend_idx}"
-      frontend_json="$(jq \
-        --arg key "${key}" \
-        --arg name "${name}" \
-        --arg folder "${id}" \
-        --arg path "${path}" \
-        '. + {($key): {name: $name, folder: $folder, path: $path}}' \
-        <<< "${frontend_json}")"
-    fi
+    group="${path%%/*}"
+    [[ -n "${group}" && "${group}" != "${path}" ]] || group="."
+
+    services_json="$(jq \
+      --arg id "${id}" \
+      --arg name "${name}" \
+      --arg path "${path}" \
+      --arg group "${group}" \
+      '. + [{id: $id, name: $name, path: $path, group: $group}]' \
+      <<< "${services_json}")"
+
+    groups_json="$(jq \
+      --arg group "${group}" \
+      --arg id "${id}" \
+      --arg name "${name}" \
+      --arg path "${path}" \
+      '.[$group] = ((.[$group] // []) + [{id: $id, name: $name, path: $path}])' \
+      <<< "${groups_json}")"
   done < <(manifest_list_services)
 
   jq -n \
     --arg generated_at "$(ops_timestamp)" \
-    --argjson backend "${backend_json}" \
-    --argjson frontend "${frontend_json}" \
+    --argjson services "${services_json}" \
+    --argjson groups "${groups_json}" \
     '{
       "$schema": "./schema.json",
       meta: {
-        description: "Generated by ops setup from .ops.yaml services.",
+        description: "Generated by ops setup from configured services.",
         generated_at: $generated_at,
         paths_relative_to: "repository root"
       },
       version: "1.0.0",
-      BACKEND: $backend,
-      FRONTEND: $frontend
+      services: $services,
+      groups: $groups
     }' > "${structure_file}"
 
-    ops_ok "Materialized .ops.project/generated/project_structure.json from .ops.yaml services"
+    ops_ok "Materialized .ops.project/generated/project_structure.json from configured services"
 }
 
 _materialize_project_values_metadata() {
@@ -1786,6 +1834,18 @@ _backup_file() {
   ops_ok "Backed up ${file#${OPS_PROJECT_ROOT}/} -> ${dest#${OPS_PROJECT_ROOT}/}"
 }
 
+_auto_backup_config() {
+  [[ -d "${OPS_PROJECT_CONFIG_DIR}" ]] || return 0
+  find "${OPS_PROJECT_CONFIG_DIR}" -maxdepth 1 -type f -name '*.json' -print -quit 2>/dev/null | grep -q . || return 0
+  local snapshot_id
+  snapshot_id="$(bash "${_SELF_DIR}/backup.sh" create --label pre-setup 2>/dev/null | tail -n 1 || true)"
+  if [[ -n "${snapshot_id}" ]]; then
+    ops_info "Pre-setup backup: ${snapshot_id}"
+  else
+    ops_warn "Pre-setup backup could not be created; continuing setup."
+  fi
+}
+
 _apply_generated() {
   local setup_tmp profile_tmp discovery_tmp decisions_tmp discovery_file had_manifest=false
   require_bins jq yq
@@ -1822,6 +1882,7 @@ _apply_generated() {
   mv "${decisions_tmp}.confirmed" "${decisions_tmp}"
 
   [[ "${EXPORT_YAML}" == "true" && -f "${OPS_MANIFEST}" ]] && _backup_file "${OPS_MANIFEST}"
+  _auto_backup_config
   _ensure_project_base
   if [[ -s "${discovery_tmp}" ]]; then
     printf '%s\n' "$(cat "${discovery_tmp}")" > "${OPS_DISCOVERY_FILE}"
@@ -1839,17 +1900,16 @@ _apply_generated() {
   if [[ "${EXPORT_YAML}" == "true" ]]; then
     _sync_yaml_if_requested
   elif [[ "${had_manifest}" == "true" ]]; then
-    ops_info "Config updated. .ops.yaml unchanged. Use --export-yaml --apply to sync YAML from config."
+    ops_info "Project config updated. YAML compatibility export unchanged."
   else
-    ops_info "Config written. .ops.yaml not created. Use ops setup export-yaml --apply when needed."
+    ops_info "Project config written. YAML compatibility export not created."
   fi
 }
 
 _show_setup() {
-  require_manifest_or_config
   ops_section "ops setup show"
-  printf 'Root config: %s (%s)\n' "${OPS_MANIFEST#${OPS_PROJECT_ROOT}/}" "$([[ -f "${OPS_MANIFEST}" ]] && printf exists || printf missing)"
   printf 'Project config: .ops.project/config (%s)\n' "$(project_config_services_exists && printf exists || printf missing)"
+  printf 'YAML compatibility export: %s (%s)\n' "${OPS_MANIFEST#${OPS_PROJECT_ROOT}/}" "$([[ -f "${OPS_MANIFEST}" ]] && printf exists || printf missing)"
   printf 'Profile: %s\n' "${PROFILE}"
   printf 'Materialized profile: %s (%s)\n' ".ops.project/profiles/${PROFILE}.json" "$( [[ -f "$(setup_profile_file "${PROFILE}")" ]] && printf exists || printf missing)"
   printf '\nSetup\n'
@@ -1857,14 +1917,16 @@ _show_setup() {
     jq '.setup // {}' "${OPS_PROJECT_CONFIG_SETTINGS_FILE}"
   elif setup_exists; then
     yq e -P '.setup' "${OPS_MANIFEST}"
-  else
+  elif project_config_services_exists; then
     _generate_setup_json
+  else
+    jq -n '{}'
   fi
   printf '\nProfile config\n'
   if [[ -f "${OPS_PROJECT_CONFIG_PROFILES_FILE}" ]] && \
      [[ "$(jq -r --arg p "${PROFILE}" '.profiles[$p] // ""' "${OPS_PROJECT_CONFIG_PROFILES_FILE}" 2>/dev/null)" != "" ]]; then
     jq --arg p "${PROFILE}" '.profiles[$p]' "${OPS_PROJECT_CONFIG_PROFILES_FILE}"
-  elif [[ "$(yq e ".profiles.${PROFILE} // \"\"" "${OPS_MANIFEST}" 2>/dev/null)" != "" ]]; then
+  elif manifest_exists && [[ "$(yq e ".profiles.${PROFILE} // \"\"" "${OPS_MANIFEST}" 2>/dev/null)" != "" ]]; then
     yq e -P ".profiles.${PROFILE}" "${OPS_MANIFEST}"
   else
     _generate_profile_json "${PROFILE}"
@@ -1970,6 +2032,58 @@ _run_setup_check() {
   exit "${exit_code}"
 }
 
+_run_plan_actions() {
+  local actions="${RUN_PLAN_ACTIONS//,/ }"
+  if [[ -z "${actions// /}" ]]; then
+    actions="start status build test lint logs stop"
+  fi
+  printf '%s\n' ${actions} | awk 'NF && !seen[$0]++'
+}
+
+_run_run_plans() {
+  require_bins jq
+  require_manifest_or_config
+
+  local report_json="[]"
+  local service_id action file status
+
+  ops_section "ops setup run-plans"
+
+  while IFS= read -r service_id; do
+    [[ -z "${service_id}" || "${service_id}" == "null" ]] && continue
+    while IFS= read -r action; do
+      [[ -z "${action}" || "${action}" == "null" ]] && continue
+      if [[ "${APPLY}" == "true" ]]; then
+        file="$(run_plan_write "${action}" "${service_id}")"
+        status="written"
+      else
+        file="$(run_plan_file "${service_id}" "${action}")"
+        status="planned"
+      fi
+      report_json="$(jq -c \
+        --arg service "${service_id}" \
+        --arg action "${action}" \
+        --arg status "${status}" \
+        --arg file "${file#${OPS_PROJECT_ROOT}/}" \
+        '. + [{service: $service, action: $action, status: $status, file: $file}]' \
+        <<< "${report_json}")"
+    done < <(_run_plan_actions)
+  done < <(manifest_list_services)
+
+  if [[ "${JSON_OUTPUT}" == "true" ]]; then
+    jq '{run_plans: .}' <<< "${report_json}"
+    return 0
+  fi
+
+  if [[ "${APPLY}" == "true" ]]; then
+    ops_ok "Regenerated run plans"
+  else
+    ops_info "Preview only. Use --apply to write run plans."
+  fi
+
+  jq -r '.[] | "  \(.status): \(.service).\(.action) -> \(.file)"' <<< "${report_json}"
+}
+
 case "${SUBCMD}" in
   wizard)
     _run_setup_wizard
@@ -1989,6 +2103,9 @@ case "${SUBCMD}" in
   dependencies)
     _run_dependencies
     ;;
+  run-plans)
+    _run_run_plans
+    ;;
   export-yaml)
     _run_export_yaml
     ;;
@@ -2007,7 +2124,7 @@ case "${SUBCMD}" in
   generate)
     ops_section "ops setup"
     if ! manifest_exists; then
-      ops_warn ".ops.yaml not found. Running discovery-driven setup."
+      ops_warn "No YAML compatibility export found. Running discovery-driven project config setup."
       discovery_json="$(discovery_scan_project_json)"
       decisions_json="$(_resolve_setup_decisions_json "${discovery_json}")"
       discovery_json="$(_apply_discovery_decisions_json "${discovery_json}" "${decisions_json}")"
@@ -2017,7 +2134,7 @@ case "${SUBCMD}" in
       if [[ "${APPLY}" == "true" ]]; then
         _apply_generated
       else
-        ops_info "Preview only. Use --apply to create .ops.project/config (use --export-yaml --apply for .ops.yaml)."
+        ops_info "Preview only. Use --apply to create .ops.project/config."
       fi
       exit 0
     fi

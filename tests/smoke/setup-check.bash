@@ -26,6 +26,21 @@ suite_setup_check() {
   assert_eq "json reports path drift" "1" "$(jq -r '.summary.changed' <<< "${output}")"
   assert_eq "json names drifted field" "path" "$(jq -r '.changed[0].fields[0].name' <<< "${output}")"
 
+  root="$(fixture_copy node-vite)"
+  assert_ok "setup --apply for compose check baseline" \
+    ops_run "${root}" setup --apply
+  services_file="${root}/.ops.project/config/services.json"
+  jq '(.services[] | select(.id == "web") | .compose_files) = []' \
+    "${services_file}" > "${services_file}.tmp"
+  mv "${services_file}.tmp" "${services_file}"
+
+  set +e
+  output="$(OPS_PROJECT_ROOT="${root}" OPS_CORE_ROOT="${OPS_CORE_ROOT}" OPS_PLAIN=true CI=true OPS_NON_INTERACTIVE=true \
+    bash "${OPS_CORE_ROOT}/main.sh" setup check --json 2>&1)"
+  set -e
+  assert_eq "json reports compose drift" "1" "$(jq -r '.summary.changed' <<< "${output}")"
+  assert_eq "json names compose drifted field" "compose_files" "$(jq -r '.changed[0].fields[0].name' <<< "${output}")"
+
   root="$(fixture_copy env-service)"
   assert_fail "check fails before config exists" 1 \
     ops_run "${root}" setup check

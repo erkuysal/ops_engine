@@ -452,7 +452,7 @@ case "${SELECTED_STRATEGY}" in
   setup_command)
     _run_selected_isolated "Running selected setup command for ${SVC_ID}" "${SELECTED_COMMAND}" "${SELECTED_CWD}"
     ;;
-  stack|manifest_action|stack_default)
+    stack|configured_action|manifest_action|stack_default)
     ops_info "Running selected stack strategy: ${SELECTED_STRATEGY}"
     _run_selected_stack
     ;;

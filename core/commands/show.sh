@@ -116,6 +116,37 @@ _legacy_target_script() {
   run_plan_legacy_target_script "${ACTION}"
 }
 
+_setup_profile_allows_deploy_env_name() {
+  local name="$1"
+  case "${SETUP_PROFILE}:${name}" in
+    staging:.env.staging|staging:.staging.env) return 0 ;;
+    production:.env.production|production:.production.env|production:.env.prod|production:.prod.env) return 0 ;;
+    prod:.env.production|prod:.production.env|prod:.env.prod|prod:.prod.env) return 0 ;;
+  esac
+  return 1
+}
+
+_env_file_deploy_name() {
+  local name="$1"
+  case "${name}" in
+    .env.staging|.staging.env|.env.production|.production.env|.env.prod|.prod.env) return 0 ;;
+  esac
+  return 1
+}
+
+_warn_if_deploy_env_for_profile() {
+  local item="$1"
+  local name
+  name="$(basename "${item}")"
+  _env_file_deploy_name "${name}" || return 0
+  _setup_profile_allows_deploy_env_name "${name}" && return 0
+  printf '  warning: %s is a deployment env file for profile %s\n' "${item}" "${SETUP_PROFILE}"
+}
+
+_project_global_env_files() {
+  project_global_env_files
+}
+
 _print_python_env_plan() {
   [[ "${STACK}" == "django" ]] || return 0
 
@@ -183,12 +214,14 @@ _print_env_files() {
     [[ -z "${item}" || "${item}" == "null" ]] && continue
     any=true
     printf '  project: %s (%s)\n' "${item}" "$(_bool_file "${OPS_PROJECT_ROOT}/${item}")"
-  done < <(manifest_get_field '.project.global_env_files[]?' 2>/dev/null || true)
+    _warn_if_deploy_env_for_profile "${item}"
+  done < <(_project_global_env_files)
 
   while IFS= read -r item; do
     [[ -z "${item}" || "${item}" == "null" ]] && continue
     any=true
     printf '  service: %s (%s)\n' "${item}" "$(_bool_file "${OPS_PROJECT_ROOT}/${item}")"
+    _warn_if_deploy_env_for_profile "${item}"
   done < <(manifest_get_service_list_field "${SVC_ID}" env_files 2>/dev/null || true)
 
   [[ "${any}" == "true" ]] || printf '  none\n'
@@ -231,9 +264,9 @@ printf '  working directory: %s\n' "${ABS_PATH}"
 printf '  action: %s\n' "${ACTION}"
 if project_config_services_exists; then
   printf '  config source: %s\n' "${OPS_PROJECT_CONFIG_SERVICES_FILE#${OPS_PROJECT_ROOT}/}"
-  printf '  compatibility manifest: %s\n' "${OPS_MANIFEST}"
+  printf '  YAML compatibility export: %s\n' "${OPS_MANIFEST}"
 else
-  printf '  config source: %s\n' "${OPS_MANIFEST}"
+  printf '  YAML compatibility source: %s\n' "${OPS_MANIFEST}"
 fi
 printf '  state dir: %s\n' "${OPS_PROJECT_STATE_DIR}"
 printf '  setup profile: %s\n' "${SETUP_PROFILE}"
@@ -250,7 +283,7 @@ printf '  2. global override: .ops/commands/%s.sh (exists: %s, executable: %s)\n
 printf '  3. setup command: %s\n' "${SETUP_CMD:-<empty>}"
 printf '  4. stack dispatcher: %s (exists: %s, function: %s)\n' \
   "${STACK_FILE#${OPS_PROJECT_ROOT}/}" "$(_bool_file "${STACK_FILE}")" "${STACK_DISPATCH_FUNC}"
-printf '  5. manifest action: %s\n' "${EXPLICIT_CMD:-<empty>}"
+printf '  5. configured action: %s\n' "${EXPLICIT_CMD:-<empty>}"
 
 SELECTED_KIND=""
 SELECTED_CMD=""
@@ -267,7 +300,7 @@ elif [[ "${ACTION}" == "start" && -n "${SETUP_CMD}" && "${SETUP_CMD}" != "null" 
   SELECTED_KIND="setup command"
   SELECTED_CMD="${SETUP_CMD}"
 elif [[ -n "${EXPLICIT_CMD}" && "${EXPLICIT_CMD}" != "null" ]]; then
-  SELECTED_KIND="manifest action via stack dispatcher"
+  SELECTED_KIND="configured action via stack dispatcher"
   SELECTED_CMD="${EXPLICIT_CMD}"
 elif STACK_DEFAULT="$(_stack_default_command "${STACK}" "${ACTION}")"; then
   SELECTED_KIND="stack default"

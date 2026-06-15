@@ -23,8 +23,8 @@ Usage: ops init [--dry-run] [--force] [--no-deps]
 Compatibility wrapper for discovery-backed setup.
 
 Mappings:
-  --dry-run          -> ops setup apply-services
-  default           -> ops setup apply-services --apply
+  --dry-run          -> ops setup --dry-run
+  default           -> ops setup --apply
   --force           -> adds --interactive for ambiguous setup decisions
   --no-deps         -> accepted for compatibility; dependency interview moved out of init
 EOF
@@ -35,13 +35,14 @@ EOF
 done
 
 ops_section "ops init"
-ops_info "init is now handled by setup apply-services."
+ops_info "init is now handled by config-first setup."
 if [[ "${NO_DEPS}" == "true" ]]; then
   ops_info "--no-deps accepted for compatibility; dependency interviews are not part of this wrapper."
 fi
 
-args=(apply-services)
+args=()
 [[ "${FORCE}" == "true" ]] && args+=(--interactive)
+[[ "${DRY_RUN}" == "true" ]] && args+=(--dry-run)
 [[ "${DRY_RUN}" != "true" ]] && args+=(--apply)
 
 exec bash "${_SELF_DIR}/setup.sh" "${args[@]}"
