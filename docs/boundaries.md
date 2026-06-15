@@ -10,7 +10,7 @@ Keep `.ops/` reusable across repositories. Project-specific facts belong outside
 | --- | --- | --- |
 | `.ops/` | ops package | Commands, libraries, stack strategies, probes, schemas, docs |
 | `.ops.project/` | project (generated) | Config, discovery cache, run plans, logs, PIDs, backups, secrets |
-| `.ops.yaml` | project (transitional) | Human-editable manifest; compatibility layer during migration |
+| `.ops.yaml` | project (optional) | Compatibility export/import of `.ops.project/config` |
 | `ops.sh` | consuming repo | Entrypoint that invokes the local `.ops` package |
 
 ## Rules for contributors
@@ -44,9 +44,9 @@ Run-plan resolution checks these before stack defaults. See [reference/action-re
 | Location | Typical edit |
 | --- | --- |
 | `.ops.project/generated/` | Machine-written; safe to regenerate |
-| `.ops.project/config/` | Written by setup; may reflect user confirmations |
+| `.ops.project/config/` | Primary project facts; written by setup and explicit config commands |
 | `.ops.project/secrets/` | Local only; gitignored |
-| `.ops.yaml` | May be merged by setup; long-term optional |
+| `.ops.yaml` | Optional compatibility export/import; not written by default |
 
 ## See also
 

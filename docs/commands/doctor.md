@@ -8,6 +8,7 @@ Read-only health check of orchestrator prerequisites and project ops layout.
 
 ```bash
 ops doctor
+ops doctor boundaries
 ```
 
 Related: `ops install doctor`, `ops setup doctor`, `ops ci doctor`.
@@ -22,12 +23,21 @@ Related: `ops install doctor`, `ops setup doctor`, `ops ci doctor`.
 - `yq`, `jq` presence
 - `OPS_PROJECT_ROOT` resolution
 - `.ops/core/` integrity
-- Writable `.ops/` local dir
+- `.ops/` package directory integrity
+- `.ops.project/` state directory availability
+
+`ops doctor boundaries` checks package/project separation:
+
+- no generated/runtime directories under `.ops`
+- no secret-like files under `.ops`
+- no machine-local paths committed in package files
+- no project-specific package references outside test fixtures
 
 ## Testing
 
 ```bash
 ./ops.sh doctor
+./ops.sh doctor boundaries
 ```
 
 ## See also
