@@ -10,7 +10,7 @@ OPS_PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ -z "${OPS_PROJECT_ROOT:-}" ]]; then
   OPS_INVOKE_CWD="$(pwd -P)"
-  if [[ "${OPS_INVOKE_CWD}" == "${OPS_PACKAGE_ROOT}" && "$(basename "${OPS_PACKAGE_ROOT}")" == ".ops" ]]; then
+  if [[ "$(basename "${OPS_PACKAGE_ROOT}")" == ".ops" ]]; then
     OPS_PROJECT_ROOT="$(dirname "${OPS_PACKAGE_ROOT}")"
   else
     OPS_PROJECT_ROOT="${OPS_INVOKE_CWD}"

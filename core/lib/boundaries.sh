@@ -61,13 +61,19 @@ boundary_doctor() {
   fi
 
   local dir
-  for dir in bin generated setup .tmp .history .ops.project; do
+  for dir in bin generated .tmp .history .ops.project; do
     if [[ -e "${root}/${dir}" ]]; then
       _boundary_fail "package contains mutable/generated directory: ${dir}"
     else
       _boundary_pass "no package-local ${dir}/ directory"
     fi
   done
+
+  if [[ -d "${root}/setup" ]]; then
+    _boundary_fail "package contains mutable/generated directory: setup"
+  else
+    _boundary_pass "no package-local setup/ directory"
+  fi
 
   local secret_files
   secret_files="$(boundary_find_files "${root}" \

@@ -102,7 +102,11 @@ ops_local_dir() {
 _ops_bootstrap_root() {
   if [[ -z "${OPS_PROJECT_ROOT:-}" ]]; then
     OPS_PROJECT_ROOT="$(repo_root)"
-    export OPS_PROJECT_ROOT
+  fi
+  OPS_PROJECT_ROOT="$(cd "${OPS_PROJECT_ROOT}" && pwd -P)"
+  export OPS_PROJECT_ROOT
+  if [[ -n "${OPS_CORE_ROOT:-}" ]]; then
+    OPS_CORE_ROOT="$(cd "${OPS_CORE_ROOT}" && pwd -P)"
   fi
   OPS_CORE_ROOT="${OPS_CORE_ROOT:-${OPS_PROJECT_ROOT}/.ops/core}"
   OPS_LOCAL_DIR="${OPS_PROJECT_ROOT}/.ops"

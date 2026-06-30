@@ -85,7 +85,7 @@ _print_diag() {
 _pass1_syntax() {
   ops_step 1 5 "Syntax check (yq parse)"
   local err_output
-  if ! err_output="$(yq e '.' "${OPS_MANIFEST}" > /dev/null 2>&1)"; then
+  if ! err_output="$(yq e '.' "${OPS_MANIFEST}" 2>&1 > /dev/null)"; then
     _err "Syntax — yq could not parse '${OPS_MANIFEST}': ${err_output}"
     return 0   # continue collecting; caller checks _ERRORS
   fi
