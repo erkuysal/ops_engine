@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .ops-core/commands/run.sh — Execution dispatcher for Phase 3+.
+# .ops-core/commands/run.sh â€” Execution dispatcher for Phase 3+.
 #
 # Usage: ops experimental run <action> <service_id>
 #
@@ -23,7 +23,7 @@ source "${_SELF_DIR}/../lib/env.sh"
 source "${_SELF_DIR}/../lib/env_materialize.sh"
 source "${_SELF_DIR}/../lib/preflight.sh"
 
-# ── Parse arguments ──────────────────────────────────────────────────────────
+# â”€â”€ Parse arguments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 MODE=""
 ACTION=""
 SVC_ID=""
@@ -61,7 +61,7 @@ case "${MODE}" in
   *) die "Invalid --mode '${MODE}' (expected foreground or background)" 2 ;;
 esac
 
-# ── Validate Config ──────────────────────────────────────────────────────────
+# â”€â”€ Validate Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 require_manifest_or_config
 
 if ! manifest_list_services | grep -qFx "${SVC_ID}"; then
@@ -114,10 +114,10 @@ SELECTED_STRATEGY="$(_run_plan_get '.resolution.selected.strategy')"
 SELECTED_COMMAND="$(_run_plan_get '.resolution.selected.command')"
 SELECTED_CWD="$(_run_plan_get '.resolution.selected.cwd')"
 
-# ── Preflight Checks ─────────────────────────────────────────────────────────
+# â”€â”€ Preflight Checks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 preflight_check_stack "${STACK}"
 
-# ── Setup Environment ────────────────────────────────────────────────────────
+# â”€â”€ Setup Environment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Materialize env files (e.g. symlink) if requested by manifest
 env_materialize_dispatch "${SVC_ID}"
 
@@ -131,7 +131,7 @@ trap '_cleanup' EXIT INT TERM
 export OPS_LOG_SERVICE="${SVC_ID}"
 ops_info "Run plan: ${RUN_PLAN_FILE#${OPS_PROJECT_ROOT}/}"
 
-# ── Resolve Strategy & Execute ───────────────────────────────────────────────
+# â”€â”€ Resolve Strategy & Execute â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Command resolution:
 # 1. Setup command from .ops.project / .ops.yaml (for start)
 # 2. Local override: .ops/commands/<service>/<action>.sh
@@ -452,7 +452,7 @@ case "${SELECTED_STRATEGY}" in
   setup_command)
     _run_selected_isolated "Running selected setup command for ${SVC_ID}" "${SELECTED_COMMAND}" "${SELECTED_CWD}"
     ;;
-    stack|configured_action|manifest_action|stack_default)
+  stack|configured_action|manifest_action|stack_default)
     ops_info "Running selected stack strategy: ${SELECTED_STRATEGY}"
     _run_selected_stack
     ;;
@@ -471,112 +471,3 @@ esac
 
 exit 0
 
-SVC_OVERRIDE="${OPS_PROJECT_ROOT}/.ops/commands/${SVC_ID}/${ACTION}.sh"
-GLOBAL_OVERRIDE="${OPS_PROJECT_ROOT}/.ops/commands/${ACTION}.sh"
-STACK_FILE="${OPS_CORE_ROOT}/stacks/${STACK}.sh"
-
-# Resolution order for action execution:
-# 1. Local override: .ops/commands/<service>/<action>.sh (highest priority — user customization)
-# 2. Global override: .ops/commands/<action>.sh (applies to all services)
-# 3. Setup command: generated setup.json (auto-generated, lower priority)
-# 4. Stack strategy: .ops/core/stacks/<stack>.sh (fallback)
-# 5. Explicit command: .ops.yaml manifest (least priority)
-
-if ! runner_is_managed_kind "${RUNNER_KIND}" && [[ -f "${SVC_OVERRIDE}" && -x "${SVC_OVERRIDE}" ]]; then
-  ops_info "Running local override: .ops/commands/${SVC_ID}/${ACTION}.sh"
-  _run_isolated "cd '${ABS_PATH}' && '${SVC_OVERRIDE}'"
-  EXIT_CODE=$?
-  if [[ $EXIT_CODE -ne 0 ]]; then exit $EXIT_CODE; else exit 0; fi
-elif ! runner_is_managed_kind "${RUNNER_KIND}" && [[ -f "${GLOBAL_OVERRIDE}" && -x "${GLOBAL_OVERRIDE}" ]]; then
-  ops_info "Running global override: .ops/commands/${ACTION}.sh"
-  _run_isolated "cd '${ABS_PATH}' && '${GLOBAL_OVERRIDE}'"
-  EXIT_CODE=$?
-  if [[ $EXIT_CODE -ne 0 ]]; then exit $EXIT_CODE; else exit 0; fi
-elif ! runner_is_managed_kind "${RUNNER_KIND}" && [[ "${ACTION}" == "start" && -n "${SETUP_CMD}" && "${SETUP_CMD}" != "null" ]]; then
-  ops_info "Running setup command: .ops.project generated setup for ${SVC_ID}"
-  _run_isolated "cd '${ABS_PATH}' && ${SETUP_CMD}"
-  EXIT_CODE=$?
-  if [[ $EXIT_CODE -ne 0 ]]; then exit $EXIT_CODE; else exit 0; fi
-fi
-
-# Need to run the stack/explicit logic inside env_exec. We can write a wrapper script
-# string that handles the resolution, or export functions. Exporting functions is messy.
-# We will construct a bash command string to execute via `env_exec`.
-
-# We will source the stack file inside the subshell, then run the dispatch function.
-# If dispatch returns 10, we fallback to eval EXPLICIT_CMD if not empty.
-
-if [[ ! -f "${STACK_FILE}" ]]; then
-  ops_error "Stack strategy not found: ${STACK_FILE}"
-  exit 2
-fi
-
-STACK_DISPATCH_FUNC="${STACK//-/_}_dispatch"
-
-# Construct the subshell logic
-SUBSHELL_CMD=$(cat <<EOF
-  cd '${ABS_PATH}' || exit 3
-  source '${STACK_FILE}'
-  
-  if type '${STACK_DISPATCH_FUNC}' >/dev/null 2>&1; then
-    '${STACK_DISPATCH_FUNC}' '${ACTION}' '${EXPLICIT_CMD}'
-    CODE=\$?
-    if [[ \$CODE -eq 10 ]]; then
-      # Not implemented by stack, check explicit command again (fallback)
-      if [[ -n '${EXPLICIT_CMD}' && '${EXPLICIT_CMD}' != 'null' ]]; then
-        eval '${EXPLICIT_CMD}'
-        CODE=\$?
-      else
-        # --- PHASE 8: COMPATIBILITY BRIDGE ---
-        LEGACY_REGISTRY="${OPS_PROJECT_ROOT}/scripts/commands.sh"
-        if [[ -f "\${LEGACY_REGISTRY}" ]]; then
-          # Extract mapped script path from the legacy registry
-          TARGET_SCRIPT="\$(bash -c "source '\${LEGACY_REGISTRY}' >/dev/null 2>&1 && echo \"\\\${COMMAND_SCRIPTS[${ACTION}]}\"")"
-          if [[ -n "\${TARGET_SCRIPT}" ]]; then
-            echo "[INFO] Bridging to legacy script: scripts/\${TARGET_SCRIPT}" >&2
-            
-            # Argument translation
-            BRIDGE_ARGS=()
-            case "${ACTION}" in
-              build|deploy|staging|release|update|publish|hotswap)
-                BRIDGE_ARGS+=("--services" "${SVC_ID}")
-                ;;
-              *)
-                BRIDGE_ARGS+=("${SVC_ID}")
-                ;;
-            esac
-            
-            # Run legacy script from project root
-            cd "${OPS_PROJECT_ROOT}" || exit 3
-            bash "${OPS_PROJECT_ROOT}/scripts/\${TARGET_SCRIPT}" "\${BRIDGE_ARGS[@]}"
-            CODE=\$?
-            exit \$CODE
-          fi
-        fi
-
-        echo "[ERROR] Action '${ACTION}' is neither implemented by stack '${STACK}', explicitly defined in manifest, nor bridged in scripts/commands.sh" >&2
-        exit 2
-      fi
-    fi
-    exit \$CODE
-  else
-    echo "[ERROR] Stack file '${STACK_FILE}' missing dispatch function '${STACK_DISPATCH_FUNC}'" >&2
-    exit 2
-  fi
-EOF
-)
-
-# Run isolated
-_run_isolated "${SUBSHELL_CMD}"
-EXIT_CODE=$?
-
-if [[ ${EXIT_CODE} -ne 0 ]]; then
-  # If the subshell exited with 2 or 3, bubble it up directly (config/preflight)
-  if [[ ${EXIT_CODE} -eq 2 || ${EXIT_CODE} -eq 3 || ${EXIT_CODE} -eq 6 || ${EXIT_CODE} -eq 7 ]]; then
-    exit "${EXIT_CODE}"
-  fi
-  # Otherwise it's a command failure
-  exit 5
-fi
-
-exit 0

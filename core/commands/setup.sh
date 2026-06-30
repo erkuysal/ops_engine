@@ -381,6 +381,42 @@ _write_project_gitignore() {
   return 0
 }
 
+_write_project_launcher_file() {
+  local file="$1"
+
+  if [[ -e "${file}" ]]; then
+    ops_info "Project launcher exists: ${file#${OPS_PROJECT_ROOT}/}"
+    return 0
+  fi
+
+  cat > "${file}" <<'EOF'
+#!/usr/bin/env bash
+# Project-local ops launcher.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -f "${SCRIPT_DIR}/.ops/core/main.sh" ]]; then
+  OPS_PROJECT_ROOT="${SCRIPT_DIR}" OPS_CORE_ROOT="${SCRIPT_DIR}/.ops/core" exec bash "${SCRIPT_DIR}/.ops/core/main.sh" "$@"
+fi
+
+if command -v ops >/dev/null 2>&1; then
+  OPS_PROJECT_ROOT="${SCRIPT_DIR}" exec ops "$@"
+fi
+
+printf '[ERROR] ops package not found. Expected .ops/core/main.sh or a global ops command on PATH.\n' >&2
+exit 1
+EOF
+
+  chmod +x "${file}" 2>/dev/null || true
+  ops_ok "Wrote ${file#${OPS_PROJECT_ROOT}/}"
+}
+
+_write_project_launchers() {
+  _write_project_launcher_file "${OPS_PROJECT_ROOT}/ops.sh"
+}
+
 _project_base_json() {
   require_bins jq
   local project_name
@@ -412,6 +448,7 @@ _project_base_json() {
 
 _ensure_project_base() {
   mkdir -p "${OPS_PROJECT_STATE_DIR}" "${OPS_PROJECT_CONFIG_DIR}" "${OPS_PROJECT_GENERATED_DIR}" "${OPS_PROJECT_LOG_DIR}" "${OPS_PROJECT_RUN_DIR}" "${OPS_PROFILES_DIR}"
+  _write_project_launchers
   _write_project_gitignore
   if [[ ! -f "${OPS_PROJECT_CONFIG_DIR}/project.json" ]]; then
     _project_base_json > "${OPS_PROJECT_CONFIG_DIR}/project.json"

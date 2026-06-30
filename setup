@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Bootstrap a project-level ops.sh launcher from an embedded .ops package.
+#
+# This script establishes the tool entrypoint only. It does not run project
+# discovery, create .ops.project, or apply project setup.
+
+set -euo pipefail
+
+OPS_PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -z "${OPS_PROJECT_ROOT:-}" ]]; then
+  OPS_INVOKE_CWD="$(pwd -P)"
+  if [[ "${OPS_INVOKE_CWD}" == "${OPS_PACKAGE_ROOT}" && "$(basename "${OPS_PACKAGE_ROOT}")" == ".ops" ]]; then
+    OPS_PROJECT_ROOT="$(dirname "${OPS_PACKAGE_ROOT}")"
+  else
+    OPS_PROJECT_ROOT="${OPS_INVOKE_CWD}"
+  fi
+fi
+
+PROJECT_LAUNCHER="${OPS_PROJECT_ROOT}/ops.sh"
+
+if [[ -e "${PROJECT_LAUNCHER}" ]]; then
+  printf '[INFO] Project launcher exists: %s\n' "${PROJECT_LAUNCHER}"
+  exit 0
+fi
+
+cat > "${PROJECT_LAUNCHER}" <<'EOF'
+#!/usr/bin/env bash
+# Project-local ops launcher.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -f "${SCRIPT_DIR}/.ops/core/main.sh" ]]; then
+  OPS_PROJECT_ROOT="${SCRIPT_DIR}" OPS_CORE_ROOT="${SCRIPT_DIR}/.ops/core" exec bash "${SCRIPT_DIR}/.ops/core/main.sh" "$@"
+fi
+
+if command -v ops >/dev/null 2>&1; then
+  OPS_PROJECT_ROOT="${SCRIPT_DIR}" exec ops "$@"
+fi
+
+printf '[ERROR] ops package not found. Expected .ops/core/main.sh or a global ops command on PATH.\n' >&2
+exit 1
+EOF
+
+chmod +x "${PROJECT_LAUNCHER}" 2>/dev/null || true
+printf '[OK] Wrote %s\n' "${PROJECT_LAUNCHER}"

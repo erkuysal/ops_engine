@@ -29,6 +29,23 @@ suite_setup() {
     ops_run "${root}" setup project --apply
   assert_file_exists "setup project creates .gitignore" \
     "${root}/.ops.project/.gitignore"
+  assert_file_exists "setup project creates ops.sh launcher" \
+    "${root}/ops.sh"
+  assert_eq "setup project does not create .ops.sh launcher" \
+    "false" "$([[ -e "${root}/.ops.sh" ]] && printf true || printf false)"
+  assert_eq "ops.sh launcher is executable" \
+    "true" "$([[ -x "${root}/ops.sh" ]] && printf true || printf false)"
+
+  root="$(fixture_copy go-process-group)"
+  printf '#!/usr/bin/env bash\nprintf custom\n' > "${root}/ops.sh"
+  printf '#!/usr/bin/env bash\nprintf custom-dot\n' > "${root}/.ops.sh"
+  assert_ok "setup project preserves existing ops.sh and ignores .ops.sh" \
+    ops_run "${root}" setup project --apply
+  assert_eq "existing ops.sh preserved" \
+    "printf custom" "$(sed -n '2p' "${root}/ops.sh")"
+  assert_eq "existing .ops.sh preserved" \
+    "printf custom-dot" "$(sed -n '2p' "${root}/.ops.sh")"
+
   output="$(ops_run "${root}" setup show)"
   case "${output}" in
     *"Project config: .ops.project/config"*) assert_eq "setup show reports project config first" "true" "true" ;;

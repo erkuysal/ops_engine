@@ -78,6 +78,26 @@ Bash `ops` command so ops can be called from any repository.
 ./ops.sh install uninstall
 ```
 
+When working from the `.ops` package checkout itself, use its package-local
+bootstrap first, then use the generated project launcher:
+
+```bash
+cd .ops
+bash setup
+cd ..
+./ops.sh install
+```
+
+If `.ops` is embedded in a project, the package bootstrap creates the
+project-level `ops.sh` without running project setup:
+
+```bash
+cd path/to/project/.ops
+bash setup
+cd ..
+./ops.sh setup --dry-run
+```
+
 The installed launcher walks upward from the current directory looking for a
 project-local `.ops/core/main.sh`. If it finds one, it runs that project copy.
 Otherwise it runs the packaged ops core against the current directory.
@@ -117,6 +137,9 @@ Module roles:
 - `run-plans`: regenerates run-plan JSON artifacts from current config
 - `ci`: creates local CI/server config and local secrets template
 - `all`: full discovery/config/services/dependencies setup path
+
+When applied, the project module also creates a missing root `ops.sh` launcher
+without overwriting an existing file.
 
 `ops setup init` remains available for the older detailed setup/profile
 interview path.

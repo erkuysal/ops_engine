@@ -16,6 +16,16 @@ ops install uninstall
 
 Routed from `core/main.sh` → `core/commands/install.sh`.
 
+From a standalone `.ops` package checkout, bootstrap the project launcher first:
+
+```bash
+cd .ops
+bash setup
+cd ..
+./ops.sh install
+./ops.sh install doctor
+```
+
 ## Flags
 
 | Flag | Effect |
@@ -38,6 +48,7 @@ Does **not** initialize `.ops.project`.
 ```bash
 ./ops.sh install doctor
 ./ops.sh install --dry-run
+cd .ops && bash setup
 ```
 
 ## See also

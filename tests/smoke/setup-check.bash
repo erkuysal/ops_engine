@@ -26,6 +26,23 @@ suite_setup_check() {
   assert_eq "json reports path drift" "1" "$(jq -r '.summary.changed' <<< "${output}")"
   assert_eq "json names drifted field" "path" "$(jq -r '.changed[0].fields[0].name' <<< "${output}")"
 
+  root="$(fixture_copy env-service)"
+  assert_ok "setup --apply for env file check baseline" \
+    ops_run "${root}" setup --apply
+  services_file="${root}/.ops.project/config/services.json"
+  jq '(.services[] | select(.id == "backend") | .env_files) = ["backend/.env"]' \
+    "${services_file}" > "${services_file}.tmp"
+  mv "${services_file}.tmp" "${services_file}"
+
+  set +e
+  output="$(OPS_PROJECT_ROOT="${root}" OPS_CORE_ROOT="${OPS_CORE_ROOT}" OPS_PLAIN=true CI=true OPS_NON_INTERACTIVE=true \
+    bash "${OPS_CORE_ROOT}/main.sh" setup check --json 2>&1)"
+  set -e
+  assert_eq "json reports env file drift" "1" "$(jq -r '.summary.changed' <<< "${output}")"
+  assert_eq "json names env file drifted field" "env_files" "$(jq -r '.changed[0].fields[0].name' <<< "${output}")"
+  assert_eq "json reports current env files" "backend/.env" "$(jq -r '.changed[0].fields[0].current | join(",")' <<< "${output}")"
+  assert_eq "json reports proposed env files" "backend/.env,backend/.env.local" "$(jq -r '.changed[0].fields[0].proposed | join(",")' <<< "${output}")"
+
   root="$(fixture_copy node-vite)"
   assert_ok "setup --apply for compose check baseline" \
     ops_run "${root}" setup --apply

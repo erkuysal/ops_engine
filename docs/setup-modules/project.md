@@ -28,12 +28,13 @@ ops setup --module=project --apply
 | `.ops.project/config/project.json` | Base project metadata |
 | `.ops.project/.gitignore` | Ignores logs, run state, secrets |
 | `.ops.project/config/`, `generated/`, `logs/`, `run/`, `profiles/` | Directories created |
+| `ops.sh` | Project-local launcher, created only when missing |
 
 ## Behavior
 
-Without `--apply`, prints planned paths and exits. With `--apply`, creates directories and `project.json` if missing.
+Without `--apply`, prints planned paths and exits. With `--apply`, creates directories, `project.json`, and the missing project launcher.
 
-Idempotent: re-running does not overwrite existing `project.json`.
+Idempotent: re-running does not overwrite existing `project.json` or `ops.sh`.
 
 ## Extension points
 

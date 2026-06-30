@@ -75,6 +75,11 @@ fi
 RUN_PLAN_JSON="$(run_plan_generate_json "${ACTION}" "${SVC_ID}")"
 RUN_PLAN_FILE="$(run_plan_write_json "${SVC_ID}" "${ACTION}" "${RUN_PLAN_JSON}")"
 
+_run_plan_get() {
+  local expr="${1:?_run_plan_get: jq expression required}"
+  jq -r "${expr} // \"\"" <<<"${RUN_PLAN_JSON}"
+}
+
 SVC_NAME="$(manifest_get_service_field "${SVC_ID}" name)"
 SVC_PATH="$(manifest_get_service_field "${SVC_ID}" path)"
 STACK="$(manifest_get_service_field "${SVC_ID}" stack)"
@@ -285,38 +290,14 @@ printf '  4. stack dispatcher: %s (exists: %s, function: %s)\n' \
   "${STACK_FILE#${OPS_PROJECT_ROOT}/}" "$(_bool_file "${STACK_FILE}")" "${STACK_DISPATCH_FUNC}"
 printf '  5. configured action: %s\n' "${EXPLICIT_CMD:-<empty>}"
 
-SELECTED_KIND=""
-SELECTED_CMD=""
-if runner_is_managed_kind "${RUNNER_KIND}"; then
-  SELECTED_KIND="managed stack runner"
-  SELECTED_CMD="${STACK_DISPATCH_FUNC} ${ACTION}"
-elif [[ -f "${SVC_OVERRIDE}" && -x "${SVC_OVERRIDE}" ]]; then
-  SELECTED_KIND="service override"
-  SELECTED_CMD="${SVC_OVERRIDE}"
-elif [[ -f "${GLOBAL_OVERRIDE}" && -x "${GLOBAL_OVERRIDE}" ]]; then
-  SELECTED_KIND="global override"
-  SELECTED_CMD="${GLOBAL_OVERRIDE}"
-elif [[ "${ACTION}" == "start" && -n "${SETUP_CMD}" && "${SETUP_CMD}" != "null" ]]; then
-  SELECTED_KIND="setup command"
-  SELECTED_CMD="${SETUP_CMD}"
-elif [[ -n "${EXPLICIT_CMD}" && "${EXPLICIT_CMD}" != "null" ]]; then
-  SELECTED_KIND="configured action via stack dispatcher"
-  SELECTED_CMD="${EXPLICIT_CMD}"
-elif STACK_DEFAULT="$(_stack_default_command "${STACK}" "${ACTION}")"; then
-  SELECTED_KIND="stack default"
-  SELECTED_CMD="${STACK_DEFAULT}"
-elif LEGACY_TARGET="$(_legacy_target_script)" && [[ -n "${LEGACY_TARGET}" ]]; then
-  SELECTED_KIND="legacy bridge"
-  SELECTED_CMD="scripts/${LEGACY_TARGET}"
-else
-  SELECTED_KIND="unresolved"
-  SELECTED_CMD="<no runner found>"
-fi
+SELECTED_KIND="$(_run_plan_get '.resolution.selected.kind')"
+SELECTED_CMD="$(_run_plan_get '.resolution.selected.command')"
+SELECTED_CWD="$(_run_plan_get '.resolution.selected.cwd')"
 
 printf '\nSelected Runner\n'
 printf '  kind: %s\n' "${SELECTED_KIND}"
 printf '  command: %s\n' "${SELECTED_CMD}"
-printf '  cwd: %s\n' "${ABS_PATH}"
+printf '  cwd: %s\n' "${SELECTED_CWD:-${ABS_PATH}}"
 if [[ "${SETUP_PORT}" != "0" && -n "${SETUP_PORT}" ]]; then
   printf '  port: %s\n' "${SETUP_PORT}"
 fi

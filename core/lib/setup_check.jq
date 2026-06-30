@@ -99,7 +99,7 @@ def cache_stale:
               (if $p.role != $c.role then {name: "role", current: $c.role, proposed: $p.role} else empty end),
               (if $p.runner_kind != $c.runner_kind then {name: "runner_kind", current: $c.runner_kind, proposed: $p.runner_kind} else empty end),
               (if $p.compose_files != $c.compose_files then {name: "compose_files", current: $c.compose_files, proposed: $p.compose_files} else empty end),
-              (if $p.env_files != $c.env_files then {name: "env_files", current: $p.env_files, proposed: $p.env_files} else empty end),
+              (if $p.env_files != $c.env_files then {name: "env_files", current: $c.env_files, proposed: $p.env_files} else empty end),
               (if $p.port != $c.port then {name: "port", current: $c.port, proposed: $p.port} else empty end),
               (if ($p.command // "") != ($c.command // "") then {name: "command", current: $c.command, proposed: $p.command} else empty end)
             ]

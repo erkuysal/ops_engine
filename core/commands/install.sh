@@ -69,9 +69,25 @@ _abs_install_path() {
 BIN_DIR="$(_abs_install_path "${BIN_DIR}")"
 PACKAGE_DIR="$(_abs_install_path "${PACKAGE_DIR}")"
 INSTALL_BIN="${BIN_DIR}/ops"
-SOURCE_ROOT="${OPS_PROJECT_ROOT}"
-SOURCE_CORE="${SOURCE_ROOT}/.ops/core/main.sh"
-SOURCE_OPS_DIR="${SOURCE_ROOT}/.ops"
+_resolve_source_ops_dir() {
+  if [[ -n "${OPS_PACKAGE_ROOT:-}" && -f "${OPS_PACKAGE_ROOT}/core/main.sh" ]]; then
+    cd "${OPS_PACKAGE_ROOT}" && pwd -P
+    return 0
+  fi
+  if [[ -n "${OPS_SOURCE_OPS_DIR:-}" && -f "${OPS_SOURCE_OPS_DIR}/core/main.sh" ]]; then
+    cd "${OPS_SOURCE_OPS_DIR}" && pwd -P
+    return 0
+  fi
+  if [[ -f "${OPS_PROJECT_ROOT}/.ops/core/main.sh" ]]; then
+    cd "${OPS_PROJECT_ROOT}/.ops" && pwd -P
+    return 0
+  fi
+  cd "${_SELF_DIR}/../.." && pwd -P
+}
+
+SOURCE_OPS_DIR="$(_resolve_source_ops_dir)"
+SOURCE_ROOT="$(dirname "${SOURCE_OPS_DIR}")"
+SOURCE_CORE="${SOURCE_OPS_DIR}/core/main.sh"
 PACKAGE_CORE="${PACKAGE_DIR}/.ops/core/main.sh"
 PACKAGE_MARKER="${PACKAGE_DIR}/.ops-install-source"
 
@@ -89,6 +105,12 @@ The installed launcher:
   - walks upward from the current directory for a project-local .ops/core/main.sh
   - otherwise runs the packaged ops core against the current directory
   - keeps setup separate from install
+
+From a standalone .ops package checkout:
+  cd .ops
+  bash setup
+  cd ..
+  ./ops.sh install
 EOF
 }
 
@@ -183,12 +205,12 @@ _installed_package_root() {
 }
 
 _source_core_version() {
-  sed -n 's/^OPS_CORE_VERSION="\([^"]*\)".*/\1/p' "${SOURCE_ROOT}/.ops/core/main.sh" 2>/dev/null | sed -n '1p'
+  sed -n 's/^OPS_CORE_VERSION="\([^"]*\)".*/\1/p' "${SOURCE_CORE}" 2>/dev/null | sed -n '1p'
 }
 
 _source_revision() {
-  if command -v git >/dev/null 2>&1 && [[ -d "${SOURCE_ROOT}/.git" || -d "${SOURCE_ROOT}/.ops/.git" ]]; then
-    git -C "${SOURCE_ROOT}" rev-parse --short HEAD 2>/dev/null || git -C "${SOURCE_ROOT}/.ops" rev-parse --short HEAD 2>/dev/null || true
+  if command -v git >/dev/null 2>&1 && [[ -d "${SOURCE_OPS_DIR}/.git" || -d "${SOURCE_ROOT}/.git" ]]; then
+    git -C "${SOURCE_OPS_DIR}" rev-parse --short HEAD 2>/dev/null || git -C "${SOURCE_ROOT}" rev-parse --short HEAD 2>/dev/null || true
   fi
 }
 
@@ -233,6 +255,7 @@ _sync_package() {
     printf 'package-format=1\n'
     printf 'ops-core-version=%s\n' "${source_version:-unknown}"
     printf 'source-root=%s\n' "${SOURCE_ROOT}"
+    printf 'source-ops-dir=%s\n' "${SOURCE_OPS_DIR}"
     printf 'source-revision=%s\n' "${source_revision:-unknown}"
     if [[ -f "${PACKAGE_MARKER}" ]]; then
       local installed_at
@@ -362,7 +385,7 @@ _install_global() {
 
   ops_info "Install target: ${INSTALL_BIN}"
   ops_info "Package target: ${PACKAGE_DIR}"
-  ops_info "Install source: ${SOURCE_ROOT}"
+  ops_info "Install source: ${SOURCE_OPS_DIR}"
 
   if [[ "${DRY_RUN}" == "true" ]]; then
     ops_info "Dry-run only. No files written."
