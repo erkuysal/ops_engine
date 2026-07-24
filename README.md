@@ -184,8 +184,9 @@ Private/local state belongs here:
 - local secrets/env values: `.ops.project/secrets/`
 - backups: `.ops.project/.history/`
 
-Secrets should not be committed. `.ops.project/.gitignore` ignores local
-secrets, logs, and run state.
+Secrets and rebuildable runtime artifacts should not be committed.
+`.ops.project/.gitignore` ignores secrets, logs, run state, generated outputs,
+and local backup history while leaving project config and profiles reviewable.
 
 ## Configuration Direction
 
@@ -370,6 +371,8 @@ ops setup dependencies
 ops setup ci
 ops ci doctor
 ops cleanup
+ops cleanup images --repository=example/app --min-version=1.2.3
+ops cleanup generated
 ops backup create --label before-change
 ops backup list
 ops backup prune --keep 20

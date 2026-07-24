@@ -69,6 +69,15 @@ between formats deliberately.
 | `ops setup export-yaml --apply` | `.ops.project/config` → `.ops.yaml` |
 | `ops setup import-yaml --apply` | `.ops.yaml` → `.ops.project/config` |
 
+## Version-control policy
+
+- Keep `config/` and intentionally shared `profiles/` reviewable.
+- Ignore `generated/`, `logs/`, `run/`, `secrets/`, and `.history/`.
+- Regenerate missing discovery, run-plan, environment, shim, and binary outputs
+  rather than restoring them from Git.
+- Use `ops backup` for local config snapshots; backup history is not repository
+  source.
+
 Source: `core/lib/manifest_sync.sh`
 
 ## See also

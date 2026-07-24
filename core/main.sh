@@ -54,7 +54,7 @@ source "${_MAIN_DIR}/lib/init.sh"
 source "${_MAIN_DIR}/lib/logger.sh"
 
 # ── Version ──────────────────────────────────────────────────────────────────
-OPS_CORE_VERSION="0.11.0-phase9"
+OPS_CORE_VERSION="0.12.0-phase9"
 OPS_PACKAGE_MARKER="${_MAIN_DIR}/../../.ops-install-source"
 
 # ── Help ─────────────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ Commands:
   stop      Dependency-aware stop             [live]
   status    Service runtime status            [live]
   logs      Multiplexed logs stream           [live]
-  cleanup   Remove stale runtime state        [live]
+  cleanup   Preview/apply explicit cleanup categories [live]
   backup    Snapshot project config           [live]
   rollback  Restore project config snapshot   [live]
   package   Inspect ops package state         [live]
@@ -132,7 +132,7 @@ ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_BOLD}status${OPS_NC}    Service runtime status (PIDs)      ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}stop${OPS_NC}      Dependency-aware stop             ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}logs${OPS_NC}      Multiplexed logs stream           ${OPS_GREEN}[live]${OPS_NC}
-  ${OPS_BOLD}cleanup${OPS_NC}   Remove stale runtime state        ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}cleanup${OPS_NC}   Preview/apply cleanup categories  ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}backup${OPS_NC}    Snapshot project config           ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}rollback${OPS_NC}  Restore project config snapshot   ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}package${OPS_NC}   Inspect ops package state         ${OPS_GREEN}[live]${OPS_NC}
@@ -251,7 +251,7 @@ case "${COMMAND}" in
     exec bash "${_MAIN_DIR}/commands/logs.sh" "$@"
     ;;
 
-  cleanup)
+  cleanup|clean)
     exec bash "${_MAIN_DIR}/commands/cleanup.sh" "$@"
     ;;
 

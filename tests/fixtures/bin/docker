@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  images)
+    cat <<'EOF'
+example/app v1.1.7 sha-old
+example/app v1.1.71 sha-legacy
+example/app v1.1.8 sha-keep
+example/app latest sha-latest
+other/app v0.1.0 sha-other
+EOF
+    ;;
+  image)
+    [[ "${2:-}" == "rm" && -n "${3:-}" ]] || exit 2
+    [[ -n "${FAKE_DOCKER_LOG:-}" ]] || exit 2
+    printf '%s\n' "${3}" >> "${FAKE_DOCKER_LOG}"
+    ;;
+  *)
+    printf 'fake docker: unsupported arguments: %s\n' "$*" >&2
+    exit 2
+    ;;
+esac
