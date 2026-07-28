@@ -8,6 +8,11 @@ Use this as the working checklist while evolving `ops`.
 
 Turn `ops setup` into the project intelligence command.
 
+In parallel, establish `ops ship` as the single continuous-delivery surface.
+The planning slice now supports schema-backed mixed Docker Compose, file-sync,
+Git-checkout, and custom-script jobs. Execution, receipts, resume, verification,
+rollback, and setup-assisted shipping configuration remain open.
+
 The immediate goal is:
 
 - `ops setup --dry-run` can discover a project even when `.ops.yaml` is missing

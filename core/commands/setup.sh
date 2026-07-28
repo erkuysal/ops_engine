@@ -23,6 +23,7 @@ INTERACTIVE=false
 EXPORT_YAML=false
 CONFIRM_INFERRED=false
 JSON_OUTPUT=false
+REFRESH=false
 MODULE=""
 EXPLICIT_SETUP_TARGET=false
 RUN_PLAN_ACTIONS=""
@@ -40,6 +41,7 @@ Usage: ops setup
        ops setup discover [--apply]
        ops setup apply-services [--apply]
        ops setup dependencies [--interactive] [--apply]
+       ops setup shipping [--interactive] [--refresh] [--apply] [--json]
        ops setup run-plans [--apply] [--action=ACTION] [--actions=a,b]
        ops setup export-yaml [--apply]
        ops setup import-yaml [--apply]
@@ -55,6 +57,7 @@ Setup modules:
   dependencies  Dependency decision preview/interview/apply.
   run-plans    Regenerate run-plan JSON artifacts from current config.
   ci            CI/server local env/config setup.
+  shipping      Infer/review mixed-driver continuous-delivery pipelines.
 
 Generates project memory under .ops.project/config by default.
 Use --export-yaml --apply to write or refresh .ops.yaml as an optional compatibility export.
@@ -78,7 +81,7 @@ if [[ $# -gt 0 ]]; then
       SUBCMD="generate"
       shift
       ;;
-    project|ci)
+    project|ci|shipping)
       EXPLICIT_SETUP_TARGET=true
       SUBCMD="$1"
       shift
@@ -118,6 +121,7 @@ while [[ $# -gt 0 ]]; do
     --confirm-inferred) CONFIRM_INFERRED=true ;;
     --check) EXPLICIT_SETUP_TARGET=true; SUBCMD="check" ;;
     --json) JSON_OUTPUT=true ;;
+    --refresh) REFRESH=true ;;
     --action=*) RUN_PLAN_ACTIONS="${RUN_PLAN_ACTIONS} ${_arg#*=}" ;;
     --actions=*) RUN_PLAN_ACTIONS="${RUN_PLAN_ACTIONS} ${_arg#*=}" ;;
     --action|--actions)
@@ -146,7 +150,7 @@ done
 if [[ -n "${MODULE}" ]]; then
   case "${MODULE}" in
     all) SUBCMD="generate" ;;
-    project|ci|dependencies|run-plans) SUBCMD="${MODULE}" ;;
+    project|ci|dependencies|run-plans|shipping) SUBCMD="${MODULE}" ;;
     services) SUBCMD="apply-services" ;;
     *) die "Unknown setup module: ${MODULE}" 2 ;;
   esac
@@ -241,7 +245,7 @@ _run_setup_wizard() {
   printf 'Project: %s\n' "${OPS_PROJECT_ROOT}"
   printf 'Profile: %s\n\n' "${PROFILE}"
 
-  local run_project=false run_services=false run_dependencies=false run_ci=false
+  local run_project=false run_services=false run_dependencies=false run_ci=false run_shipping=false
 
   if _setup_wizard_choose "Create/update base .ops.project structure?" "y"; then
     run_project=true
@@ -254,6 +258,9 @@ _run_setup_wizard() {
   fi
   if _setup_wizard_choose "Configure local CI/deploy env and SSH metadata?" "n"; then
     run_ci=true
+  fi
+  if _setup_wizard_choose "Configure shipping pipelines?" "n"; then
+    run_shipping=true
   fi
 
   printf '\n'
@@ -280,6 +287,9 @@ _run_setup_wizard() {
   fi
   if [[ "${run_ci}" == "true" ]]; then
     _run_ci_setup_module
+  fi
+  if [[ "${run_shipping}" == "true" ]]; then
+    _run_shipping_setup_module
   fi
 
   printf '\n'
@@ -1708,6 +1718,15 @@ _run_ci_setup_module() {
   fi
 }
 
+_run_shipping_setup_module() {
+  local args=()
+  [[ "${INTERACTIVE}" == "true" ]] && args+=(--interactive)
+  [[ "${REFRESH}" == "true" ]] && args+=(--refresh)
+  [[ "${APPLY}" == "true" ]] && args+=(--apply)
+  [[ "${JSON_OUTPUT}" == "true" ]] && args+=(--json)
+  bash "${_SELF_DIR}/setup-shipping.sh" "${args[@]}"
+}
+
 _interactive_profile_json() {
   require_bins jq
   local host user path ssh_key docker_network compose_files cert_provider cert_domain health_name health_url healthchecks_json compose_json
@@ -2139,6 +2158,9 @@ case "${SUBCMD}" in
     ;;
   dependencies)
     _run_dependencies
+    ;;
+  shipping)
+    _run_shipping_setup_module
     ;;
   run-plans)
     _run_run_plans

@@ -20,6 +20,7 @@ Contributor and implementation docs for the `.ops` package. For day-to-day usage
 | [setup-modules/dependencies.md](setup-modules/dependencies.md) | `ops setup dependencies` |
 | [setup-modules/run-plans.md](setup-modules/run-plans.md) | `ops setup run-plans` |
 | [setup-modules/ci.md](setup-modules/ci.md) | `ops setup ci` |
+| [setup-modules/shipping.md](setup-modules/shipping.md) | `ops setup shipping` |
 | [setup-modules/all-and-wizard.md](setup-modules/all-and-wizard.md) | `ops setup`, `ops setup all`, wizard |
 
 ## Commands
@@ -38,6 +39,7 @@ Contributor and implementation docs for the `.ops` package. For day-to-day usage
 | [commands/backup.md](commands/backup.md) | `core/commands/backup.sh`, `core/commands/rollback.sh` |
 | [commands/package.md](commands/package.md) | `core/commands/package.sh` |
 | [commands/monitor.md](commands/monitor.md) | `core/commands/monitor.sh` |
+| [commands/ship.md](commands/ship.md) | `core/commands/ship.sh`, `core/lib/shipping.sh` |
 | [commands/build.md](commands/build.md) | `core/commands/build.sh` |
 | [commands/deploy.md](commands/deploy.md) | `core/commands/deploy.sh` |
 | [commands/ci.md](commands/ci.md) | `core/commands/ci.sh` |

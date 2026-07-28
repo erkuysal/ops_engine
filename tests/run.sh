@@ -25,6 +25,8 @@ source "${SCRIPT_DIR}/smoke/boundaries.bash"
 source "${SCRIPT_DIR}/smoke/discovery.bash"
 # shellcheck source=smoke/setup.bash
 source "${SCRIPT_DIR}/smoke/setup.bash"
+# shellcheck source=smoke/setup-shipping.bash
+source "${SCRIPT_DIR}/smoke/setup-shipping.bash"
 # shellcheck source=smoke/validate.bash
 source "${SCRIPT_DIR}/smoke/validate.bash"
 # shellcheck source=smoke/status.bash
@@ -49,6 +51,8 @@ source "${SCRIPT_DIR}/smoke/docker-compose.bash"
 source "${SCRIPT_DIR}/smoke/runner-profiles.bash"
 # shellcheck source=smoke/container-pipeline.bash
 source "${SCRIPT_DIR}/smoke/container-pipeline.bash"
+# shellcheck source=smoke/shipping.bash
+source "${SCRIPT_DIR}/smoke/shipping.bash"
 # shellcheck source=smoke/libs.bash
 source "${SCRIPT_DIR}/smoke/libs.bash"
 
@@ -57,6 +61,7 @@ suite_doctor
 suite_boundaries
 suite_discovery
 suite_setup
+suite_setup_shipping
 suite_validate
 suite_status
 suite_cleanup
@@ -69,6 +74,7 @@ suite_healthcheck
 suite_docker_compose
 suite_runner_profiles
 suite_container_pipeline
+suite_shipping
 suite_libs
 
 harness_summary

@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "default_pipeline": "production",
+  "targets": {
+    "production-server": {
+      "transport": "ssh",
+      "config_ref": "ci.deploy",
+      "path": "/srv/sample"
+    }
+  },
+  "pipelines": {
+    "production": {
+      "description": "Mixed delivery fixture",
+      "target": "production-server",
+      "jobs": [
+        {
+          "id": "application",
+          "uses": "docker.compose",
+          "compose_files": ["infra/docker-compose.yml"],
+          "services": ["backend"],
+          "env_files": [".env"],
+          "transfer": {
+            "files": ["infra/docker-compose.yml"]
+          },
+          "verify": {
+            "kind": "http",
+            "url": "https://example.test/health"
+          }
+        },
+        {
+          "id": "homepage",
+          "uses": "files.sync",
+          "source": "infra/homepage/",
+          "destination": "/srv/sample/infra/homepage/",
+          "depends_on": ["application"],
+          "deploy": {
+            "command": ["docker", "compose", "restart", "homepage"]
+          }
+        },
+        {
+          "id": "documentation",
+          "uses": "git.checkout",
+          "repository": "ssh://git@example.test/docs.git",
+          "ref": "release-{tag}",
+          "destination": "/srv/sample/docs",
+          "build": {
+            "command": ["npm", "run", "build"]
+          },
+          "deploy": {
+            "command": ["systemctl", "reload", "docs"]
+          }
+        },
+        {
+          "id": "release-hook",
+          "uses": "script",
+          "stages": {
+            "publish": {
+              "command": ["bash", "scripts/publish.sh"]
+            },
+            "verify": {
+              "command": ["bash", "scripts/check.sh"]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -30,6 +30,7 @@
 #   rollback  — Restore project config snapshot (LIVE)
 #   package   — Inspect ops package checkout/install state (LIVE)
 #   monitor   — Lightweight service/infra checks (LIVE)
+#   ship      — Unified delivery pipeline planner (LIVE, execution pending)
 #   build     — Native container build/push basics (LIVE)
 #   deploy    — Native remote container deploy basics (LIVE)
 #   update    — Manifest self-healing update (LIVE)
@@ -87,6 +88,7 @@ Commands:
   rollback  Restore project config snapshot   [live]
   package   Inspect ops package state         [live]
   monitor   Lightweight service/infra checks  [live]
+  ship      Unified delivery pipeline planner [live, plan-only]
   build     Native container build/push       [live]
   deploy    Native remote container deploy    [live]
   update    Manifest self-healing update      [live]
@@ -137,6 +139,7 @@ ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_BOLD}rollback${OPS_NC}  Restore project config snapshot   ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}package${OPS_NC}   Inspect ops package state         ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}monitor${OPS_NC}   Lightweight service/infra checks  ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}ship${OPS_NC}      Unified delivery pipeline planner ${OPS_YELLOW}[live, plan-only]${OPS_NC}
   ${OPS_BOLD}build${OPS_NC}     Native container build/push       ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}deploy${OPS_NC}    Native remote container deploy    ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}update${OPS_NC}    Manifest self-healing update      ${OPS_GREEN}[live]${OPS_NC}
@@ -269,6 +272,10 @@ case "${COMMAND}" in
 
   monitor)
     exec bash "${_MAIN_DIR}/commands/monitor.sh" "$@"
+    ;;
+
+  ship)
+    exec bash "${_MAIN_DIR}/commands/ship.sh" "$@"
     ;;
 
   build)

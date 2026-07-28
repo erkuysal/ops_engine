@@ -43,6 +43,8 @@ Ops currently supports:
 - focused credential checks for Docker, SSH deploy, and optional GitHub bridge
 - simple SSH server connection checks from local config/env
 - native basic container build/push and remote compose deploy commands
+- unified mixed-driver shipping plans through `ops ship --dry-run`
+- setup-owned shipping inference and configuration through `ops setup shipping`
 - optional GitHub Actions secret guidance
 - WSL/Windows binary path support for cross-OS execution
 
@@ -162,6 +164,7 @@ Current shape:
     profiles.json
     decisions.json
     ci.json
+    shipping.json
   generated/
     discovery.json
     setup.json
