@@ -10,8 +10,8 @@
 #
 # Available commands:
 #   doctor    — System prerequisites check (LIVE)
-#   bootstrap — One-shot .ops.yaml generator from project metadata (LIVE)
-#   validate  — Four-pass manifest validator (LIVE)
+#   bootstrap — Project config bootstrap from workspace metadata (LIVE)
+#   validate  — Project config validator (LIVE)
 #   env       — Environment broker: show/doctor subcommands (LIVE)
 #   install   — Install/doctor/repair/uninstall global ops command (LIVE)
 #   setup     — Project setup/profile generation (LIVE)
@@ -69,8 +69,8 @@ Usage: ops <command> [args...]
 Commands:
   doctor    Check orchestrator prerequisites  [live]
             Use 'ops doctor boundaries' for package boundary checks.
-  bootstrap Seed .ops.yaml from probe-based workspace discovery [live]
-  validate  Manifest validator                [live]
+  bootstrap Seed project config from probe-based workspace discovery [live]
+  validate  Project config validator          [live]
   install   Install/doctor/repair global ops command [live]
   setup     Project setup/profile config      [live]
   ci        CI/server credential readiness     [live]
@@ -102,8 +102,9 @@ Flags:
   --dry-run         Preview without making changes (where supported)
 
 Settings:
-  .ops.yaml           Project-specific settings/setup/profiles
-  .ops.project/       Generated runtime state (logs, pids, backups)
+  .ops.project/config/ Primary project configuration
+  .ops.project/        Generated runtime state (logs, pids, backups, secrets)
+  .ops.yaml            Optional compatibility import/export
 
 Docs:
   CONTRIBUTING.md     Contributor guide
@@ -120,8 +121,8 @@ ${OPS_BOLD}Usage:${OPS_NC} ${OPS_DIM}./ops.sh <command> [args...]${OPS_NC}
 ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_BOLD}doctor${OPS_NC}    Check orchestrator prerequisites     ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_DIM}          doctor boundaries checks package/project separation${OPS_NC}
-  ${OPS_BOLD}bootstrap${OPS_NC} Seed .ops.yaml from probe-based discovery ${OPS_GREEN}[live]${OPS_NC}
-  ${OPS_BOLD}validate${OPS_NC}  Manifest validator                   ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}bootstrap${OPS_NC} Seed project config from discovery  ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}validate${OPS_NC}  Project config validator            ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}install${OPS_NC}   Install/doctor/repair global command ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}setup${OPS_NC}     Project setup/profile config         ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}ci${OPS_NC}        CI/server credential readiness        ${OPS_GREEN}[live]${OPS_NC}
@@ -153,8 +154,9 @@ ${OPS_BOLD}Flags${OPS_NC}
   ${OPS_DIM}--dry-run         Preview without making changes (where supported)${OPS_NC}
 
 ${OPS_BOLD}Settings${OPS_NC}
-  ${OPS_DIM}.ops.yaml           Project-specific settings/setup/profiles${OPS_NC}
-  ${OPS_DIM}.ops.project/       Generated runtime state (logs, pids, backups)${OPS_NC}
+  ${OPS_DIM}.ops.project/config/ Primary project configuration${OPS_NC}
+  ${OPS_DIM}.ops.project/        Generated runtime state (logs, pids, backups, secrets)${OPS_NC}
+  ${OPS_DIM}.ops.yaml            Optional compatibility import/export${OPS_NC}
 
 ${OPS_BOLD}Docs${OPS_NC}
   ${OPS_DIM}CONTRIBUTING.md     Contributor guide${OPS_NC}

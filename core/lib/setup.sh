@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .ops/core/lib/setup.sh — Root .ops.yaml setup/profile accessors.
+# .ops/core/lib/setup.sh — Config-first setup/profile accessors.
 
 set -euo pipefail
 if [[ "${_OPS_CORE_SETUP_LOADED:-}" == "1" ]]; then return 0; fi
@@ -58,7 +58,8 @@ setup_default_profile() {
     require_bins jq
     local profile
     profile="$(jq -r '.default_profile // ""' "${OPS_PROJECT_CONFIG_PROFILES_FILE}" 2>/dev/null || true)"
-    [[ -n "${profile}" && "${profile}" != "null" ]] && { printf '%s' "${profile}"; return 0; }
+    [[ -n "${profile}" && "${profile}" != "null" ]] && printf '%s' "${profile}" || printf 'local'
+    return 0
   fi
   if setup_exists; then
     local profile
@@ -70,24 +71,26 @@ setup_default_profile() {
 }
 
 setup_validate() {
-  require_bins jq yq
   if [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
+    require_bins jq
     jq -e '.setup // {} | type == "object"' "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" >/dev/null
     return $?
   fi
   [[ -f "${OPS_SETUP_FILE}" ]] || return 0
+  require_bins yq
   yq e '.setup // {}' "${OPS_SETUP_FILE}" >/dev/null
 }
 
 setup_profile_validate() {
   local profile="$1"
-  require_bins jq yq
   if [[ -f "${OPS_PROJECT_CONFIG_PROFILES_FILE}" ]]; then
+    require_bins jq
     jq -e --arg profile "${profile}" '.profiles[$profile] // {} | type == "object"' \
       "${OPS_PROJECT_CONFIG_PROFILES_FILE}" >/dev/null
     return $?
   fi
   [[ -f "${OPS_SETUP_FILE}" ]] || return 0
+  require_bins yq
   yq e ".profiles.${profile} // {}" "${OPS_SETUP_FILE}" >/dev/null
 }
 
@@ -98,7 +101,8 @@ setup_get() {
     require_bins jq
     local config_value
     config_value="$(jq -r ".setup${expr} // \"\"" "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" 2>/dev/null || true)"
-    [[ -n "${config_value}" && "${config_value}" != "null" ]] && { printf '%s' "${config_value}"; return 0; }
+    [[ -n "${config_value}" && "${config_value}" != "null" ]] && printf '%s' "${config_value}" || printf '%s' "${default}"
+    return 0
   fi
   if ! setup_exists; then
     printf '%s' "${default}"
@@ -208,7 +212,8 @@ setup_profile_get() {
     require_bins jq
     local config_value
     config_value="$(jq -r ".profiles.\"${profile}\"${expr} // \"\"" "${OPS_PROJECT_CONFIG_PROFILES_FILE}" 2>/dev/null || true)"
-    [[ -n "${config_value}" && "${config_value}" != "null" ]] && { printf '%s' "${config_value}"; return 0; }
+    [[ -n "${config_value}" && "${config_value}" != "null" ]] && printf '%s' "${config_value}" || printf '%s' "${default}"
+    return 0
   fi
   if ! setup_exists; then
     printf '%s' "${default}"

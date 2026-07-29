@@ -115,11 +115,11 @@ manifest_service_exists() {
   if project_config_services_exists; then
     require_bins jq
     result="$(jq -r --arg id "${id}" '.services[]? | select(.id == $id) | .id' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true)"
+    [[ -n "${result}" ]]
+    return $?
   fi
-  if [[ -z "${result}" ]]; then
-    require_manifest
-    result="$(_manifest_yq ".services[] | select(.id == \"${id}\") | .id")"
-  fi
+  require_manifest
+  result="$(_manifest_yq ".services[] | select(.id == \"${id}\") | .id")"
   [[ -n "${result}" ]]
 }
 

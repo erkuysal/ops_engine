@@ -18,7 +18,9 @@ Read runtime settings from config or manifest (modes, preview lines, dependency 
 
 ## Inputs and outputs
 
-Reads `.ops.project/config/settings.json` with `.ops.yaml` `settings:` fallback.
+Reads `.ops.project/config/settings.json` when it exists. Missing JSON keys use
+the caller-provided defaults and do not fall through to YAML. When project
+config has not been materialized, `.ops.yaml` remains a compatibility fallback.
 
 ## See also
 

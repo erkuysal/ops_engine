@@ -46,12 +46,12 @@ for _arg in "$@"; do
 done
 
 # ── Preconditions ─────────────────────────────────────────────────────────────
-require_bins yq jq
-
 VALIDATE_CONFIG_ONLY=false
 if project_config_services_exists; then
+  require_bins jq
   VALIDATE_CONFIG_ONLY=true
 elif manifest_exists; then
+  require_bins yq
   manifest_prepare_validation_source
   trap manifest_cleanup_validation_source EXIT
 else

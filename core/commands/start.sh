@@ -91,9 +91,8 @@ _persist_django_conda_env() {
   local tmp_file=""
   [[ -n "${env_name}" ]] || return 0
 
-  require_bins jq yq
-
   if project_config_services_exists; then
+    require_bins jq
     tmp_file="$(mktemp)"
     jq --arg id "${service_id}" --arg env_name "${env_name}" '
       .services |= map(
@@ -138,6 +137,7 @@ _persist_django_conda_env() {
     return 0
   fi
 
+  require_bins yq
   yq e -i ".setup.services.\"${service_id}\".django.conda_env = \"${env_name}\"" "${OPS_MANIFEST}"
 
   current_manager="$(yq e '.setup.runtimes.python.manager // ""' "${OPS_MANIFEST}" 2>/dev/null || true)"

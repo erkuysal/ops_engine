@@ -431,12 +431,12 @@ _project_base_json() {
   require_bins jq
   local project_name
   project_name="$(basename "${OPS_PROJECT_ROOT}")"
-  if manifest_exists; then
-    project_name="$(yq e '.project.name // ""' "${OPS_MANIFEST}" 2>/dev/null || true)"
-    [[ -z "${project_name}" || "${project_name}" == "null" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
-  elif [[ -f "${OPS_PROJECT_CONFIG_DIR}/project.json" ]]; then
+  if [[ -f "${OPS_PROJECT_CONFIG_DIR}/project.json" ]]; then
     project_name="$(jq -r '.name // empty' "${OPS_PROJECT_CONFIG_DIR}/project.json" 2>/dev/null || true)"
     [[ -z "${project_name}" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
+  elif manifest_exists; then
+    project_name="$(yq e '.project.name // ""' "${OPS_MANIFEST}" 2>/dev/null || true)"
+    [[ -z "${project_name}" || "${project_name}" == "null" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
   fi
 
   jq -n \
@@ -486,18 +486,21 @@ _run_project_setup() {
   _ensure_project_base
 }
 
-_manifest_service_process_exists() {
+_configured_service_process_exists() {
   local id="$1" name="$2"
+  if project_config_services_exists; then
+    manifest_get_service_list_field "${id}" "run.processes.name" 2>/dev/null | grep -qFx "${name}"
+    return $?
+  fi
   manifest_exists || return 1
-  yq e ".services[] | select(.id == \"${id}\") | .run.processes[]?.name" "${OPS_MANIFEST}" 2>/dev/null |
-    grep -qFx "${name}"
+  yq e ".services[] | select(.id == \"${id}\") | .run.processes[]?.name" "${OPS_MANIFEST}" 2>/dev/null | grep -qFx "${name}"
 }
 
 _process_output_default_enabled() {
   local id="$1" name="$2"
 
-  if manifest_exists; then
-    if _manifest_service_process_exists "${id}" "${name}"; then
+  if project_config_services_exists || manifest_exists; then
+    if _configured_service_process_exists "${id}" "${name}"; then
       printf 'true'
     else
       printf 'false'
@@ -518,7 +521,7 @@ _process_output_is_ambiguous() {
     webhook|*webhook*) return 0 ;;
   esac
 
-  if manifest_exists && ! _manifest_service_process_exists "${id}" "${name}"; then
+  if (project_config_services_exists || manifest_exists) && ! _configured_service_process_exists "${id}" "${name}"; then
     return 0
   fi
 
@@ -782,7 +785,7 @@ _service_dependency_default_json() {
     ' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true)"
   fi
 
-  if [[ -z "${deps_json}" || "${deps_json}" == "null" ]] && manifest_exists; then
+  if ! project_config_services_exists && [[ -z "${deps_json}" || "${deps_json}" == "null" ]] && manifest_exists; then
     deps_json="$(yq e -o=json ".services[] | select(.id == \"${service_id}\") | .depends_on // []" "${OPS_MANIFEST}" 2>/dev/null || true)"
   fi
 
@@ -1082,11 +1085,11 @@ _generate_setup_json_from_discovery() {
   local proposed_json
   proposed_json="$(_proposed_setup_json_from_discovery "${discovery_json}")"
 
-  if manifest_exists; then
-    local existing_json
-    existing_json="$(yq e -o=json '.setup // {}' "${OPS_MANIFEST}" 2>/dev/null || printf '{}')"
-  elif [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
+  local existing_json
+  if [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
     existing_json="$(jq -c '.setup // {}' "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" 2>/dev/null || printf '{}')"
+  elif manifest_exists; then
+    existing_json="$(yq e -o=json '.setup // {}' "${OPS_MANIFEST}" 2>/dev/null || printf '{}')"
   else
     existing_json='{}'
   fi
@@ -1152,7 +1155,10 @@ _generate_project_config_json_from_discovery() {
   local project_name global_env_files
 
   project_name="$(basename "${OPS_PROJECT_ROOT}")"
-  if manifest_exists; then
+  if [[ -f "${OPS_PROJECT_CONFIG_PROJECT_FILE}" ]]; then
+    project_name="$(jq -r '.name // ""' "${OPS_PROJECT_CONFIG_PROJECT_FILE}" 2>/dev/null || true)"
+    [[ -z "${project_name}" || "${project_name}" == "null" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
+  elif manifest_exists; then
     project_name="$(yq e '.project.name // ""' "${OPS_MANIFEST}" 2>/dev/null || true)"
     [[ -z "${project_name}" || "${project_name}" == "null" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
   fi
@@ -1193,10 +1199,10 @@ _generate_services_config_json_from_discovery() {
   local discovery_json="$1" setup_json="$2" decisions_json="${3:-}"
   local existing_services_json="[]"
 
-  if manifest_exists; then
-    existing_services_json="$(yq e -o=json '.services // []' "${OPS_MANIFEST}" 2>/dev/null || printf '[]')"
-  elif project_config_services_exists; then
+  if project_config_services_exists; then
     existing_services_json="$(jq -c '.services // []' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || printf '[]')"
+  elif manifest_exists; then
+    existing_services_json="$(yq e -o=json '.services // []' "${OPS_MANIFEST}" 2>/dev/null || printf '[]')"
   fi
   [[ -n "${existing_services_json}" && "${existing_services_json}" != "null" ]] || existing_services_json="[]"
   [[ -n "${decisions_json}" ]] || decisions_json='{"decisions":[]}'
@@ -1300,7 +1306,9 @@ _materialize_project_config_from_discovery() {
   local settings_json="{}" services_tmp
 
   mkdir -p "${OPS_PROJECT_CONFIG_DIR}"
-  if manifest_exists; then
+  if [[ -f "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" ]]; then
+    settings_json="$(jq -c '.settings // {}' "${OPS_PROJECT_CONFIG_SETTINGS_FILE}" 2>/dev/null || printf '{}')"
+  elif manifest_exists; then
     settings_json="$(yq e -o=json '.settings // {}' "${OPS_MANIFEST}" 2>/dev/null || printf '{}')"
   else
     settings_json="$(_default_settings_json)"
@@ -1574,20 +1582,20 @@ _print_discovery_config_proposal() {
   _discovery_services_yaml "${discovery_json}"
 
   printf '\nProposed setup config from discovery:\n'
-  _generate_setup_json_from_discovery "${discovery_json}" | yq e -P -
+  _generate_setup_json_from_discovery "${discovery_json}" | jq '.'
 }
 
 _print_service_merge_summary() {
   local services_json="$1"
 
   printf '\nCurrent runtime services:\n'
-  if manifest_exists; then
-    yq e -r '.services[].id' "${OPS_MANIFEST}" 2>/dev/null |
+  if project_config_services_exists; then
+    jq -r '.services[]?.id // empty' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null |
       while IFS= read -r id; do
         [[ -n "${id}" && "${id}" != "null" ]] && printf '  - %s\n' "${id}"
       done
-  elif project_config_services_exists; then
-    jq -r '.services[]?.id // empty' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null |
+  elif manifest_exists; then
+    yq e -r '.services[].id' "${OPS_MANIFEST}" 2>/dev/null |
       while IFS= read -r id; do
         [[ -n "${id}" && "${id}" != "null" ]] && printf '  - %s\n' "${id}"
       done
@@ -1603,10 +1611,10 @@ _print_service_merge_summary() {
 
   printf '\nRemoved from runtime services:\n'
   local removed current_ids='[]'
-  if manifest_exists; then
-    current_ids="$(yq e -o=json '[.services[].id] // []' "${OPS_MANIFEST}" 2>/dev/null || printf '[]')"
-  elif project_config_services_exists; then
+  if project_config_services_exists; then
     current_ids="$(jq -c '[.services[]?.id // empty]' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || printf '[]')"
+  elif manifest_exists; then
+    current_ids="$(yq e -o=json '[.services[].id] // []' "${OPS_MANIFEST}" 2>/dev/null || printf '[]')"
   fi
   removed="$(jq -r -n \
     --argjson current "${current_ids}" \
@@ -1620,7 +1628,7 @@ _print_service_merge_summary() {
 }
 
 _run_apply_services() {
-  require_bins jq yq
+  require_bins jq
   require_manifest_or_config
 
   local discovery_json decisions_json setup_json profile_json services_config services_json services_tmp
@@ -1667,7 +1675,7 @@ _run_apply_services() {
 }
 
 _run_dependencies() {
-  require_bins jq yq
+  require_bins jq
 
   local discovery_json decisions_json setup_json profile_json services_config
 
@@ -1774,7 +1782,7 @@ _interactive_profile_json() {
 }
 
 _materialize_project_structure_reference() {
-  require_bins jq yq
+  require_bins jq
 
   local structure_file
   structure_file="${OPS_PROJECT_GENERATED_DIR}/project_structure.json"
@@ -1833,14 +1841,14 @@ _materialize_project_structure_reference() {
 }
 
 _materialize_project_values_metadata() {
-  require_bins jq yq
+  require_bins jq
 
   local values_file tmp_values
   values_file="${OPS_PROJECT_GENERATED_DIR}/project_values.json"
   mkdir -p "${OPS_PROJECT_GENERATED_DIR}"
 
   local project_name
-  project_name="$(yq e '.project.name // ""' "${OPS_MANIFEST}" 2>/dev/null || true)"
+  project_name="$(manifest_get_project_field name 2>/dev/null || true)"
   [[ -z "${project_name}" || "${project_name}" == "null" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
 
   local stack_mapping_json id stack
@@ -1904,7 +1912,7 @@ _auto_backup_config() {
 
 _apply_generated() {
   local setup_tmp profile_tmp discovery_tmp decisions_tmp discovery_file had_manifest=false
-  require_bins jq yq
+  require_bins jq
   setup_tmp="$(mktemp)"
   profile_tmp="$(mktemp)"
   discovery_tmp="$(mktemp)"
@@ -2025,7 +2033,11 @@ _doctor_setup() {
   local fail=0
   require_manifest_or_config
   ops_section "ops setup doctor"
-  require_bins jq yq
+  if project_config_services_exists; then
+    require_bins jq
+  else
+    require_bins yq
+  fi
 
   if setup_validate; then
     ops_ok "setup config valid or not yet generated"

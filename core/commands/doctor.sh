@@ -97,14 +97,18 @@ else
   _check_warn ".ops.project/ state directory not yet created (run 'ops setup --apply')"
 fi
 
-# ── Optional tools ───────────────────────────────────────────────────────────
-for _tool in yq jq; do
-  if command -v "${_tool}" &>/dev/null; then
-    _check_pass "${_tool} found: $(command -v "${_tool}")"
-  else
-    _check_warn "${_tool} not found — required for project config validation. Install: brew install ${_tool} / apt install ${_tool}"
-  fi
-done
+# ── Configuration tools ─────────────────────────────────────────────────────
+if command -v jq &>/dev/null; then
+  _check_pass "jq found: $(command -v jq)"
+else
+  _check_fail "jq not found — required for project config. Install: brew install jq / apt install jq"
+fi
+
+if command -v yq &>/dev/null; then
+  _check_pass "yq found: $(command -v yq)"
+else
+  _check_warn "yq not found — optional unless importing, exporting, or validating .ops.yaml compatibility files"
+fi
 
 # ── ops.sh reachable ─────────────────────────────────────────────────────────
 if [[ -f "${OPS_PROJECT_ROOT}/ops.sh" ]]; then
