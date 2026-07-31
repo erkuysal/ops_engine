@@ -1,0 +1,6 @@
+{
+  "name": "frontend",
+  "scripts": {"dev": "vite"},
+  "dependencies": {"vue": "latest"},
+  "devDependencies": {"vite": "latest"}
+}

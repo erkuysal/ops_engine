@@ -22,4 +22,10 @@ suite_setup_shipping() {
 
   json="$(ops_run "${root}" ship --json)"
   assert_eq "generated shipping config is consumable" "docker.compose" "$(jq -r '.jobs[0].uses' <<< "${json}")"
+
+  root="$(fixture_copy workspace-root-compose)"
+  json="$(ops_run "${root}" setup shipping --refresh --json)"
+  assert_eq "shipping keeps root base and production override" \
+    "docker-compose.yml,deployment/compose/production.yml" \
+    "$(jq -r '.pipelines.production.jobs[0].compose_files | join(",")' <<< "${json}")"
 }

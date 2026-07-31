@@ -80,38 +80,94 @@ shipping_pick_compose_file() {
 }
 
 shipping_compose_job_json() {
-  local id="$1" compose_file="$2"
-  jq -n --arg id "${id}" --arg file "${compose_file}" '{
+  local id="$1" compose_file files='[]'
+  shift
+  local buildable=false
+  for compose_file in "$@"; do
+    files="$(jq -c --arg file "${compose_file}" '. + [$file]' <<< "${files}")"
+    grep -Eq '^[[:space:]]+build:' "${OPS_PROJECT_ROOT}/${compose_file}" && buildable=true
+  done
+  jq -n --arg id "${id}" --argjson files "${files}" --argjson buildable "${buildable}" '{
     id: $id,
     uses: "docker.compose",
-    compose_files: [$file],
-    project_directory: "."
-  }'
+    compose_files: $files,
+    project_directory: ".",
+    verify: {kind: "compose_health", compose_files: $files}
+  } + (if $buildable then {} else {build: false, publish: false} end)'
+}
+
+shipping_production_compose_jobs_json() {
+  local files="$1" path id job jobs='[]' found=false
+  while IFS=$'\t' read -r id path; do
+    if grep -Fxq "${path}" <<< "${files}"; then
+      job="$(shipping_compose_job_json "${id}" "${path}")"
+      jobs="$(jq -c --argjson job "${job}" '. + [$job]' <<< "${jobs}")"
+      found=true
+    fi
+  done <<'EOF'
+app	deployment/compose/app/production.yml
+web	deployment/compose/frontend/production.yml
+ops	deployment/compose/platform/production.yml
+edge	deployment/compose/edge/caddy.yml
+EOF
+
+  if [[ "${found}" == "true" ]]; then
+    printf '%s' "${jobs}"
+    return 0
+  fi
+
+  if grep -Fxq 'docker-compose.yml' <<< "${files}" && grep -Fxq 'deployment/compose/production.yml' <<< "${files}"; then
+    job="$(shipping_compose_job_json application docker-compose.yml deployment/compose/production.yml)"
+    jq -cn --argjson job "${job}" '[$job]'
+    return 0
+  fi
+  if grep -Fxq 'compose.yml' <<< "${files}" && grep -Fxq 'deployment/compose/production.yml' <<< "${files}"; then
+    job="$(shipping_compose_job_json application compose.yml deployment/compose/production.yml)"
+    jq -cn --argjson job "${job}" '[$job]'
+    return 0
+  fi
+
+  path="$(shipping_pick_compose_file production "${files}")"
+  [[ -n "${path}" ]] || { printf '[]'; return 0; }
+  job="$(shipping_compose_job_json application "${path}")"
+  jq -cn --argjson job "${job}" '[$job]'
 }
 
 shipping_infer_config() {
-  local files production_file staging_file fallback pipelines targets default_pipeline job
+  local files production_jobs staging_file fallback pipelines targets default_pipeline job repository checkout_job
   files="$(shipping_discover_compose_files)"
-  production_file="$(shipping_pick_compose_file production "${files}")"
+  production_jobs="$(shipping_production_compose_jobs_json "${files}")"
   staging_file="$(shipping_pick_compose_file staging "${files}")"
   pipelines='{}'
   targets='{}'
   default_pipeline=''
 
-  if [[ -n "${production_file}" ]]; then
-    job="$(shipping_compose_job_json application "${production_file}")"
-    pipelines="$(jq -c --argjson job "${job}" '. + {
+  if [[ "$(jq 'length' <<< "${production_jobs}")" -gt 0 ]]; then
+    repository="$(git -C "${OPS_PROJECT_ROOT}" config --get remote.origin.url 2>/dev/null || true)"
+    if [[ -n "${repository}" ]]; then
+      checkout_job="$(jq -n --arg repository "${repository}" '{
+        id: "source",
+        uses: "git.checkout",
+        repository: $repository,
+        ref: "{tag}",
+        destination: "."
+      }')"
+      production_jobs="$(jq -c --argjson checkout "${checkout_job}" \
+        '[$checkout] + map(.depends_on = (((.depends_on // []) + ["source"]) | unique))' \
+        <<< "${production_jobs}")"
+    fi
+    pipelines="$(jq -c --argjson jobs "${production_jobs}" '. + {
       production: {
         description: "Inferred production delivery pipeline",
         target: "production",
-        jobs: [$job]
+        jobs: $jobs
       }
     }' <<< "${pipelines}")"
     targets="$(jq -c '. + {production: {transport: "ssh", config_ref: "ci.deploy"}}' <<< "${targets}")"
     default_pipeline='production'
   fi
 
-  if [[ -n "${staging_file}" && "${staging_file}" != "${production_file}" ]]; then
+  if [[ -n "${staging_file}" ]]; then
     job="$(shipping_compose_job_json application "${staging_file}")"
     pipelines="$(jq -c --argjson job "${job}" '. + {
       staging: {

@@ -1,0 +1,5 @@
+{
+  "name": "backend",
+  "scripts": {"dev": "nest start --watch"},
+  "dependencies": {"@nestjs/core": "latest"}
+}

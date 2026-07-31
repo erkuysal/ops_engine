@@ -9,6 +9,8 @@ _OPS_CORE_CONFIG_VALIDATE_LOADED=1
 source "${OPS_CORE_ROOT}/lib/manifest.sh"
 # shellcheck source=graph.sh
 source "${OPS_CORE_ROOT}/lib/graph.sh"
+# shellcheck source=global_profiles.sh
+source "${OPS_CORE_ROOT}/lib/global_profiles.sh"
 
 config_validate_available() {
   project_config_services_exists
@@ -30,6 +32,7 @@ config_validate_run() {
   local settings_file="${OPS_PROJECT_CONFIG_SETTINGS_FILE}"
   local profiles_file="${OPS_PROJECT_CONFIG_PROFILES_FILE}"
   local project_file="${OPS_PROJECT_CONFIG_PROJECT_FILE}"
+  local ci_file="${OPS_PROJECT_CONFIG_DIR}/ci.json"
 
   # Structural: services.json
   if ! jq -e '.services | type == "array"' "${services_file}" >/dev/null 2>&1; then
@@ -60,6 +63,14 @@ config_validate_run() {
   if [[ -f "${profiles_file}" ]]; then
     jq -e '.profiles // {} | type == "object"' "${profiles_file}" >/dev/null 2>&1 || \
       "$err_fn" "profiles.json — .profiles must be an object"
+  fi
+
+  if [[ -f "${ci_file}" ]]; then
+    local global_profile_ref
+    global_profile_ref="$(jq -r '.global_profile // ""' "${ci_file}" 2>/dev/null || true)"
+    if [[ -n "${global_profile_ref}" ]] && ! global_profile_exists "${global_profile_ref}"; then
+      "$warn_fn" "ci.json — global profile '${global_profile_ref}' is not installed on this machine (run: ops global setup ${global_profile_ref} --interactive --apply)"
+    fi
   fi
 
   # Semantic: per service

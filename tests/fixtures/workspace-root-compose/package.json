@@ -1,0 +1,5 @@
+{
+  "name": "@company/hemak",
+  "private": true,
+  "workspaces": ["backend", "frontend"]
+}

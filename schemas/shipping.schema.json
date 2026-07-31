@@ -68,6 +68,7 @@
                 "ref": { "type": "string" },
                 "transfer": {},
                 "build": {},
+                "publish": {},
                 "deploy": {},
                 "verify": {},
                 "stages": {

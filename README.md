@@ -27,6 +27,7 @@ To change the ops package (commands, discovery, stacks, setup modules), see:
 Ops currently supports:
 
 - global `ops` launcher install, doctor, repair, update, and uninstall
+- XDG machine-global VPS/Docker profiles with per-project references and overrides
 - installed package version markers and `ops install update`
 - project setup discovery with `.ops.project` materialization
 - guided `ops setup` flow when run in an interactive terminal
@@ -46,6 +47,7 @@ Ops currently supports:
 - unified mixed-driver shipping plans through `ops ship --dry-run`
 - setup-owned shipping inference and configuration through `ops setup shipping`
 - optional GitHub Actions secret guidance
+- machine-global named VPS/Docker profiles with project references and overrides
 - WSL/Windows binary path support for cross-OS execution
 
 The system is usable, but still evolving. `.ops.project/config` is the primary
@@ -106,6 +108,26 @@ Otherwise it runs the packaged ops core against the current directory.
 
 Install does not initialize a project.
 
+### Global deployment profiles
+
+Reusable machine-specific VPS and Docker settings live outside repositories:
+
+```bash
+ops global setup personal-vps --interactive --apply
+ops global list
+```
+
+Select one inside a project:
+
+```bash
+ops global use personal-vps --apply
+ops global current
+```
+
+The project stores the profile ID and optional overrides. SSH keys remain in
+`~/.ssh`, and Docker passwords remain in Docker's credential store or runtime
+environment variables.
+
 ### Setup
 
 `ops setup` is the project initializer.
@@ -113,6 +135,11 @@ Install does not initialize a project.
 Bare `ops setup` starts a guided setup sequence when run in a terminal, similar
 to modern JavaScript framework initializers. In non-interactive shells it keeps
 preview behavior so scripts and CI do not hang.
+
+Remote deployment is a selectable setup capability. When selected, Ops presents
+saved global connections plus choices to create a reusable connection, enter
+project-only values, or configure deployment later. If it is deferred, the
+first interactive `ops deploy` opens the same selector.
 
 ```bash
 ops setup

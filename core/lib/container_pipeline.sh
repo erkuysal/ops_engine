@@ -5,6 +5,9 @@ set -euo pipefail
 if [[ "${_OPS_CORE_CONTAINER_PIPELINE_LOADED:-}" == "1" ]]; then return 0; fi
 _OPS_CORE_CONTAINER_PIPELINE_LOADED=1
 
+# shellcheck source=global_profiles.sh
+source "${OPS_CORE_ROOT}/lib/global_profiles.sh"
+
 OPS_CI_CONFIG_FILE="${OPS_PROJECT_CONFIG_DIR}/ci.json"
 
 container_usage_common() {
@@ -39,7 +42,7 @@ container_shell_quote() {
   printf '%q' "$1"
 }
 
-container_ci_config_json() {
+container_ci_config_raw_json() {
   if [[ -f "${OPS_CI_CONFIG_FILE}" ]]; then
     cat "${OPS_CI_CONFIG_FILE}"
   else
@@ -51,8 +54,12 @@ container_ci_config_json() {
   fi
 }
 
+container_ci_config_json() {
+  global_profile_resolve_ci_json "$(container_ci_config_raw_json)"
+}
+
 container_ci_env_file() {
-  jq -r '.secrets.local_env_file // ".ops.project/secrets/ci.env"' <<< "$(container_ci_config_json)"
+  jq -r '.secrets.local_env_file // ".ops.project/secrets/ci.env"' <<< "$(container_ci_config_raw_json)"
 }
 
 container_load_ci_env() {

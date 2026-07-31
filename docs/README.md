@@ -28,6 +28,7 @@ Contributor and implementation docs for the `.ops` package. For day-to-day usage
 | Doc | Source |
 | --- | --- |
 | [commands/install.md](commands/install.md) | `core/commands/install.sh` |
+| [commands/global.md](commands/global.md) | `core/commands/global.sh`, `core/lib/global_profiles.sh` |
 | [commands/setup.md](commands/setup.md) | `core/commands/setup.sh` |
 | [commands/run.md](commands/run.md) | `core/commands/run.sh` |
 | [commands/show.md](commands/show.md) | `core/commands/show.sh` |

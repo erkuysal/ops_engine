@@ -14,6 +14,7 @@
 #   validate  — Project config validator (LIVE)
 #   env       — Environment broker: show/doctor subcommands (LIVE)
 #   install   — Install/doctor/repair/uninstall global ops command (LIVE)
+#   global    — Machine-global deployment profiles (LIVE)
 #   setup     — Project setup/profile generation (LIVE)
 #   ci        — CI/server credential readiness config (LIVE)
 #   ssh       — Simple server SSH connection check (LIVE)
@@ -72,6 +73,7 @@ Commands:
   bootstrap Seed project config from probe-based workspace discovery [live]
   validate  Project config validator          [live]
   install   Install/doctor/repair global ops command [live]
+  global    Manage machine-global deployment profiles [live]
   setup     Project setup/profile config      [live]
   ci        CI/server credential readiness     [live]
   ssh       Simple server SSH connection check [live]
@@ -124,6 +126,7 @@ ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_BOLD}bootstrap${OPS_NC} Seed project config from discovery  ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}validate${OPS_NC}  Project config validator            ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}install${OPS_NC}   Install/doctor/repair global command ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}global${OPS_NC}    Machine-global deployment profiles  ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}setup${OPS_NC}     Project setup/profile config         ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}ci${OPS_NC}        CI/server credential readiness        ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}ssh${OPS_NC}       Simple server SSH connection check    ${OPS_GREEN}[live]${OPS_NC}
@@ -206,6 +209,10 @@ case "${COMMAND}" in
 
   install)
     exec bash "${_MAIN_DIR}/commands/install.sh" "$@"
+    ;;
+
+  global)
+    exec bash "${_MAIN_DIR}/commands/global.sh" "$@"
     ;;
 
   setup)

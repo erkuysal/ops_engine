@@ -45,12 +45,29 @@ suite_container_pipeline() {
   assert_eq "deploy json includes compose target" "infra" "$(jq -r '.targets[0].service' <<< "${json}")"
   assert_eq "deploy json remote from ci config" "deploy@deploy.example.test" "$(jq -r '.remote' <<< "${json}")"
   assert_eq "deploy json path from ci config" "/srv/sample" "$(jq -r '.deploy_path' <<< "${json}")"
+  assert_eq "deploy json default stages" "true,false,true" "$(jq -r '[.stages.pull,.stages.build,.stages.start] | join(",")' <<< "${json}")"
 
   output="$(ops_run "${root}" deploy --service=infra --dry-run)"
   case "${output}" in
     *VERSION=latest*docker*compose*infra/docker-compose.yml*pull*VERSION=latest*docker*compose*infra/docker-compose.yml*up*-d*) assert_eq "deploy dry-run prints pull and up" "true" "true" ;;
     *) assert_eq "deploy dry-run prints pull and up" "true" "false" ;;
   esac
+
+  json="$(ops_run "${root}" deploy --service=infra --no-pull --build --no-start --tag=test123 --json)"
+  assert_eq "deploy json build-only stages" "false,true,false" "$(jq -r '[.stages.pull,.stages.build,.stages.start] | join(",")' <<< "${json}")"
+
+  output="$(ops_run "${root}" deploy --service=infra --no-pull --build --no-start --dry-run)"
+  case "${output}" in
+    *"pull: false"*"build: true"*"start: false"*docker*compose*build*) assert_eq "deploy build-only dry-run prints build without activation" "true" "true" ;;
+    *) assert_eq "deploy build-only dry-run prints build without activation" "true" "false" ;;
+  esac
+  case "${output}" in
+    *docker*compose*pull*|*docker*compose*up*-d*) assert_eq "deploy build-only omits pull and start commands" "false" "true" ;;
+    *) assert_eq "deploy build-only omits pull and start commands" "false" "false" ;;
+  esac
+
+  assert_fail "deploy rejects plan with all stages disabled" 2 \
+    ops_run "${root}" deploy --service=infra --no-pull --no-start --dry-run
 
   json="$(ops_run "${root}" deploy backend --tag=test123 --json)"
   assert_eq "positional deploy resolves owning service" "infra" "$(jq -r '.targets[0].service' <<< "${json}")"

@@ -112,18 +112,18 @@ shipping_plan_json() {
       };
     def driver_actions($job; $pipeline_target):
       if $job.uses == "docker.compose" then
-        [action($job; $pipeline_target; "build"; "docker.compose.build"; {
+        (if ($job | has("build")) and $job.build == false then [] else [action($job; $pipeline_target; "build"; "docker.compose.build"; {
             compose_files: $job.compose_files,
             services: ($job.services // []),
             env_files: ($job.env_files // []),
             project_directory: ($job.project_directory // ".")
-          }),
-         action($job; $pipeline_target; "publish"; "docker.compose.push"; {
+          })] end)
+        + (if ($job | has("publish")) and $job.publish == false then [] else [action($job; $pipeline_target; "publish"; "docker.compose.push"; {
             compose_files: $job.compose_files,
             services: ($job.services // []),
             env_files: ($job.env_files // []),
             project_directory: ($job.project_directory // ".")
-          })]
+          })] end)
         + (if configured($job.transfer) then
              [action($job; $pipeline_target; "transfer"; "docker.compose.transfer"; $job.transfer)]
            else [] end)

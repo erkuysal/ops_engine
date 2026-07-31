@@ -9,6 +9,8 @@ suite_shipping() {
   assert_eq "ship chooses configured default pipeline" "production" "$(jq -r '.pipeline' <<< "${json}")"
   assert_eq "ship includes all four driver kinds" "4" "$(jq '[.jobs[].uses] | unique | length' <<< "${json}")"
   assert_eq "ship plans compose build" "1" "$(jq '[.actions[] | select(.operation == "docker.compose.build" and .selected)] | length' <<< "${json}")"
+  assert_eq "deploy-only compose omits build and publish" "0" "$(jq '[.actions[] | select(.job == "runtime" and (.stage == "build" or .stage == "publish"))] | length' <<< "${json}")"
+  assert_eq "deploy-only compose keeps deploy" "1" "$(jq '[.actions[] | select(.job == "runtime" and .stage == "deploy" and .selected)] | length' <<< "${json}")"
   assert_eq "ship expands tag placeholder for git ref" "release-test123" "$(jq -r '.actions[] | select(.operation == "git.checkout") | .inputs.ref' <<< "${json}")"
 
   json="$(ops_run "${root}" ship production --job=application --no-push --no-deploy --json)"

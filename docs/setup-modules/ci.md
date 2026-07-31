@@ -9,6 +9,7 @@ Delegates to the CI command to configure local deploy/CI metadata and secrets te
 ```bash
 ops setup ci
 ops setup ci --interactive --apply
+ops setup ci --global-profile personal-vps --apply
 ```
 
 ## Source files
@@ -27,9 +28,14 @@ ops setup ci --interactive --apply
 
 ## Behavior
 
-1. Calls `ops ci setup` with forwarded `--interactive`, `--apply`, `--profile`.
+1. Calls `ops ci setup` with forwarded `--interactive`, `--apply`, `--profile`,
+   and `--global-profile`.
 2. On apply, also runs `ops ci env --apply` for the secrets template.
 3. Preview mode suggests `ops ci env` for the env file.
+
+Interactive mode presents saved/create/project-only/later connection choices.
+This is the same flow used lazily by the first interactive deploy when no
+complete connection is configured.
 
 ## Extension points
 

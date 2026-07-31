@@ -63,6 +63,15 @@ It is validated against the structural contract in
 Project-specific values belong in the project configuration. Driver behavior
 and validation remain package-owned under `.ops/`.
 
+Compose jobs with no `build:` entries are inferred with `build: false` and
+`publish: false`, producing deployment-only plans. Grouped conventional
+production manifests under `deployment/compose/{app,frontend,platform,edge}`
+are inferred as separate jobs when present.
+For a root deployment, `docker-compose.yml` (or `compose.yml`) is paired with
+`deployment/compose/production.yml` in one job. When the project has a Git
+remote, inference also adds a source checkout keyed to the release tag; Compose
+jobs include a Compose-health verification stage.
+
 ## Stage controls
 
 - `--no-build`

@@ -70,6 +70,11 @@ compatibility I/O through `ops setup export-yaml` and `ops setup import-yaml`,
 plus a fallback for projects that have not materialized config yet. See
 [boundaries.md](boundaries.md) and [reference/config-files.md](reference/config-files.md).
 
+Machine-level deployment defaults live in XDG named profiles. Runtime
+resolution is: process environment → non-empty project override → selected
+global profile → command default. Projects persist only the profile reference
+and intentional overrides.
+
 ## Action resolution
 
 See [reference/action-resolution.md](reference/action-resolution.md). Implementation: `core/lib/run_plan.sh` (`run_plan_generate_json`).

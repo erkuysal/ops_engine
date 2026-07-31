@@ -28,6 +28,12 @@ Structured workspace discovery: scan directories, score stack probes, classify r
 - Standard compose filenames under a detected service path are recorded in
   `compose_files`; pure Docker/Compose directories still become `docker_group`
   services.
+- A root Compose stack is detected independently of a root Node workspace. It
+  becomes a project-named `docker_group` service (or `<name>-compose` on an ID
+  collision), and a root `deployment/compose/production.yml` is paired with
+  the base Compose file.
+- NestJS services default to port 3000 for development dependency inference;
+  this lets a Vite proxy targeting port 3000 infer its backend dependency.
 - Setup infers `runner.kind: compose` for `docker_group` roles and `process_group` for multi-binary Go services.
 - Env file discovery via `core/lib/env_discovery.sh` (service `env_files`, project `global_env_files`).
 

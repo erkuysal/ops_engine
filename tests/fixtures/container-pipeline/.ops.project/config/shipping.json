@@ -28,6 +28,13 @@
           }
         },
         {
+          "id": "runtime",
+          "uses": "docker.compose",
+          "compose_files": ["infra/docker-compose.yml"],
+          "build": false,
+          "publish": false
+        },
+        {
           "id": "homepage",
           "uses": "files.sync",
           "source": "infra/homepage/",

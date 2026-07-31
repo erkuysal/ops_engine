@@ -7,7 +7,8 @@ Local-first CI/deploy configuration: server metadata, credential readiness, SSH 
 ## CLI / entrypoints
 
 ```bash
-ops ci setup [--interactive] [--apply] [--profile NAME]
+ops ci setup [--interactive] [--apply] [--profile NAME] [--global-profile NAME]
+ops ci setup --defer-connection --apply
 ops ci show
 ops ci doctor
 ops ci credentials
@@ -34,6 +35,17 @@ ops credentials
 | --- | --- |
 | `.ops.project/config/ci.json` | Non-secret metadata |
 | `.ops.project/secrets/ci.env` | Local secrets (gitignored) |
+
+Interactive setup selects a saved global connection, creates one, accepts
+project-only values, or defers deployment configuration. Connection profiles
+contain routes and credential references only; SSH keys and registry passwords
+remain in their native stores.
+
+After applying a connection, setup optionally tests SSH plus remote Docker. It
+offers separate `docker login` actions for the local build machine and the
+remote Docker host used by Compose pulls. Docker owns both resulting
+credentials; Ops never writes the password or token into its package, global
+profile, or project JSON.
 
 ## Testing
 

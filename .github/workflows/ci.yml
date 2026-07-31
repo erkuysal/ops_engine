@@ -1,10 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [root, main]
-  pull_request:
-    branches: [root, main]
+  # Automatic CI is intentionally disabled while validation is run locally.
+  workflow_dispatch:
 
 jobs:
   smoke:

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ops machine-global deployment profile",
+  "type": "object",
+  "required": ["version", "id", "deploy", "docker"],
+  "properties": {
+    "version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+    "updated_at": { "type": "string" },
+    "deploy": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string" },
+        "user": { "type": "string" },
+        "path_template": { "type": "string" },
+        "ssh_key_path": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "docker": {
+      "type": "object",
+      "properties": {
+        "registry": { "type": "string" },
+        "namespace": { "type": "string" },
+        "username": { "type": "string" },
+        "credentials": {
+          "type": "object",
+          "properties": {
+            "source": { "enum": ["docker-credential-store"] },
+            "username_env": { "type": "string" },
+            "password_env": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -27,6 +27,8 @@ REFRESH=false
 MODULE=""
 EXPLICIT_SETUP_TARGET=false
 RUN_PLAN_ACTIONS=""
+GLOBAL_CI_PROFILE=""
+DEFER_CI_CONNECTION=false
 
 _usage_setup() {
   cat <<'EOF'
@@ -34,7 +36,7 @@ Usage: ops setup
        ops setup [all] [--profile NAME] [--dry-run] [--apply] [--export-yaml] [--confirm-inferred]
        ops setup --module MODULE [--apply]
        ops setup project [--apply]
-       ops setup ci [--interactive] [--apply]
+       ops setup ci [--interactive] [--global-profile NAME] [--defer-connection] [--apply]
        ops setup init [--profile NAME] [--apply]
        ops setup interactive [--profile NAME] [--apply]
        ops setup --interactive [--profile NAME] [--apply]
@@ -138,6 +140,13 @@ while [[ $# -gt 0 ]]; do
       [[ $# -gt 0 && "${1}" != --* ]] || die "--profile requires a profile name" 2
       PROFILE="$1"
       ;;
+    --global-profile=*) GLOBAL_CI_PROFILE="${_arg#*=}" ;;
+    --global-profile)
+      shift
+      [[ $# -gt 0 && "${1}" != --* ]] || die "--global-profile requires a profile name" 2
+      GLOBAL_CI_PROFILE="$1"
+      ;;
+    --defer-connection) DEFER_CI_CONNECTION=true ;;
     --help|-h)
       _usage_setup
       exit 0
@@ -256,7 +265,7 @@ _run_setup_wizard() {
   if _setup_wizard_choose "Review service dependencies?" "y"; then
     run_dependencies=true
   fi
-  if _setup_wizard_choose "Configure local CI/deploy env and SSH metadata?" "n"; then
+  if _setup_wizard_choose "Configure a deployment connection (saved, new, or project-only)?" "n"; then
     run_ci=true
   fi
   if _setup_wizard_choose "Configure shipping pipelines?" "n"; then
@@ -376,11 +385,15 @@ _write_project_gitignore() {
       printf 'secrets/\n'
       printf 'logs/\n'
       printf 'run/\n'
+      printf 'cache/\n'
+      printf 'generated/\n'
+      printf 'profiles/\n'
+      printf '.history/\n'
     } > "${file}"
     ops_ok "Wrote ${file#${OPS_PROJECT_ROOT}/}"
   else
     local changed=false
-    for item in 'secrets/' 'logs/' 'run/'; do
+    for item in 'secrets/' 'logs/' 'run/' 'cache/' 'generated/' 'profiles/' '.history/'; do
       if ! grep -qx "${item}" "${file}" 2>/dev/null; then
         printf '%s\n' "${item}" >> "${file}"
         changed=true
@@ -715,6 +728,10 @@ _discovery_infer_port() {
       [[ -n "${port}" ]] && { printf '%s' "${port}"; return 0; }
       if jq -e '.package.framework? | test("vite|vue")' <<< "${entry}" >/dev/null 2>&1; then
         printf '5173'
+        return 0
+      fi
+      if jq -e '.deps["@nestjs/core"]? != null' <<< "${entry}" >/dev/null 2>&1; then
+        printf '3000'
         return 0
       fi
       printf '0'
@@ -1717,6 +1734,8 @@ _run_ci_setup_module() {
   [[ "${INTERACTIVE}" == "true" ]] && args+=(--interactive)
   [[ "${APPLY}" == "true" ]] && args+=(--apply)
   [[ -n "${PROFILE}" ]] && args+=(--profile "${PROFILE}")
+  [[ -n "${GLOBAL_CI_PROFILE}" ]] && args+=(--global-profile "${GLOBAL_CI_PROFILE}")
+  [[ "${DEFER_CI_CONNECTION}" == "true" ]] && args+=(--defer-connection)
   bash "${_SELF_DIR}/ci.sh" "${args[@]}"
 
   if [[ "${APPLY}" == "true" ]]; then

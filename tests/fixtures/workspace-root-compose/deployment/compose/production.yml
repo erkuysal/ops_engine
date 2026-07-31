@@ -1,0 +1,5 @@
+services:
+  api:
+    restart: unless-stopped
+  web:
+    restart: unless-stopped

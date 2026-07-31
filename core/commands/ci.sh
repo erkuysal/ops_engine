@@ -7,6 +7,7 @@ _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
+source "${_SELF_DIR}/../lib/global_profiles.sh"
 
 SUBCMD="${1:-show}"
 case "${SUBCMD}" in
@@ -17,6 +18,8 @@ esac
 APPLY=false
 INTERACTIVE=false
 PROFILE=""
+GLOBAL_PROFILE=""
+DEFER_CONNECTION=false
 KEY_PATH=""
 KEY_COMMENT="github-actions-deploy"
 REMOTE_COMMAND=""
@@ -32,6 +35,13 @@ while [[ $# -gt 0 ]]; do
       PROFILE="$2"
       shift
       ;;
+    --global-profile=*) GLOBAL_PROFILE="${1#*=}" ;;
+    --global-profile)
+      [[ $# -ge 2 ]] || die "--global-profile requires a value" 2
+      GLOBAL_PROFILE="$2"
+      shift
+      ;;
+    --defer-connection) DEFER_CONNECTION=true ;;
     --path=*) KEY_PATH="${1#*=}" ;;
     --path)
       [[ $# -ge 2 ]] || die "--path requires a value" 2
@@ -70,7 +80,7 @@ OPS_CI_CONFIG_FILE="${OPS_PROJECT_CONFIG_DIR}/ci.json"
 
 _usage_ci() {
   cat <<'EOF'
-Usage: ops ci setup [--interactive] [--apply] [--profile NAME]
+Usage: ops ci setup [--interactive] [--apply] [--global-profile NAME] [--defer-connection]
        ops ci show
        ops ci doctor
        ops ci credentials
@@ -88,6 +98,13 @@ Local secrets can live in:
 
 GitHub Actions remains optional. ops can print GitHub secret setup guidance, but
 the primary flow can use your own env file and SSH connection.
+
+Machine-global VPS/Docker defaults can be selected with --global-profile or
+through `ops global use NAME --apply`.
+
+Interactive setup presents saved connections alongside "create", "project-only",
+and "configure later" choices. Newly created connections are stored globally;
+the project stores only their profile name.
 EOF
 }
 
@@ -100,6 +117,94 @@ _prompt_ci_value() {
   fi
   read -r value
   printf '%s' "${value:-${default}}"
+}
+
+_prompt_ci_yes_no() {
+  local label="$1" default="${2:-n}" value suffix="[y/N]"
+  [[ "${default}" == "y" ]] && suffix="[Y/n]"
+  printf '%s %s: ' "${label}" "${suffix}" >&2
+  IFS= read -r value || value=""
+  value="${value:-${default}}"
+  case "${value,,}" in
+    y|yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_prompt_ci_choice() {
+  local label="$1"
+  shift
+  local options=("$@") choice total="${#options[@]}" index
+
+  printf '\n%s\n' "${label}" >&2
+  index=1
+  for choice in "${options[@]}"; do
+    printf '  %d) %s\n' "${index}" "${choice}" >&2
+    index=$((index + 1))
+  done
+  while true; do
+    printf 'Choose [1-%d]: ' "${total}" >&2
+    IFS= read -r choice || choice=""
+    if [[ "${choice}" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= total )); then
+      printf '%s' "${options[$((choice - 1))]}"
+      return 0
+    fi
+    printf 'Please enter a number between 1 and %d.\n' "${total}" >&2
+  done
+}
+
+_create_global_connection_interactive() {
+  local profile_id
+  profile_id="$(_prompt_ci_value "New connection name" "")"
+  [[ -n "${profile_id}" ]] || die "Connection name is required." 2
+  global_profile_validate_id "${profile_id}" ||
+    die "Invalid connection name. Use letters, numbers, dots, dashes, or underscores." 2
+
+  printf '\nConfigure SSH + remote Docker Compose connection: %s\n' "${profile_id}" >&2
+  local args=(setup "${profile_id}" --interactive)
+  [[ "${APPLY}" == "true" ]] && args+=(--apply)
+  bash "${_SELF_DIR}/global.sh" "${args[@]}" >&2
+
+  if [[ "${APPLY}" != "true" ]]; then
+    ops_info "The new connection was previewed but not saved; it cannot be selected until setup is applied." >&2
+    printf ''
+    return 0
+  fi
+  printf '%s' "${profile_id}"
+}
+
+_select_global_connection_interactive() {
+  local current="${1:-}" profile selection
+  local -a profiles=() labels=()
+
+  while IFS= read -r profile; do
+    [[ -n "${profile}" ]] || continue
+    profiles+=("${profile}")
+    if [[ "${profile}" == "${current}" ]]; then
+      labels+=("${profile} (current)")
+    else
+      labels+=("${profile}")
+    fi
+  done < <(global_profile_list)
+  labels+=("Create a new reusable connection")
+  labels+=("Use project-only connection values")
+  labels+=("Configure deployment later")
+
+  selection="$(_prompt_ci_choice "Select a deployment connection:" "${labels[@]}")"
+  case "${selection}" in
+    "Create a new reusable connection")
+      _create_global_connection_interactive
+      ;;
+    "Use project-only connection values")
+      printf '__project__'
+      ;;
+    "Configure deployment later")
+      printf '__defer__'
+      ;;
+    *)
+      printf '%s' "${selection% (current)}"
+      ;;
+  esac
 }
 
 _git_remote_url() {
@@ -136,16 +241,33 @@ _generate_ci_config_json() {
   local local_env_file
   local workflow_server workflow_desktop default_branch
   local github_secrets docker_secrets deploy_secrets
+  local global_profile connection_selection
+
+  global_profile="$(_existing_ci_get '.global_profile' '')"
+  [[ -n "${GLOBAL_PROFILE}" ]] && global_profile="${GLOBAL_PROFILE}"
+  if [[ "${DEFER_CONNECTION}" == "true" ]]; then
+    global_profile=""
+  elif [[ "${INTERACTIVE}" == "true" && -z "${GLOBAL_PROFILE}" ]]; then
+    connection_selection="$(_select_global_connection_interactive "${global_profile}")"
+    case "${connection_selection}" in
+      __project__) global_profile="" ;;
+      __defer__) global_profile=""; DEFER_CONNECTION=true ;;
+      *) global_profile="${connection_selection}" ;;
+    esac
+  fi
+  if [[ -n "${global_profile}" ]]; then
+    global_profile_json "${global_profile}" >/dev/null
+  fi
 
   project_name="$(_existing_ci_get '.project.name' "$(_project_name)")"
   repo_url="$(_existing_ci_get '.github.repository' "$(_git_remote_url)")"
   docker_namespace="$(_existing_ci_get '.docker.namespace' '')"
-  docker_registry="$(_existing_ci_get '.docker.registry' 'docker.io')"
+  docker_registry="$(_existing_ci_get '.docker.registry' "$([[ -n "${global_profile}" ]] && printf '' || printf 'docker.io')")"
   image_prefix="$(_existing_ci_get '.docker.image_prefix' "${project_name}")"
   deploy_host="$(_existing_ci_get '.deploy.host' '')"
   deploy_user="$(_existing_ci_get '.deploy.user' '')"
   deploy_path="$(_existing_ci_get '.deploy.path' '')"
-  deploy_key_path="$(_existing_ci_get '.deploy.ssh_key_path' "${HOME}/.ssh/github_actions_deploy")"
+  deploy_key_path="$(_existing_ci_get '.deploy.ssh_key_path' "")"
   local_env_file="$(_existing_ci_get '.secrets.local_env_file' '.ops.project/secrets/ci.env')"
   workflow_server="$(_existing_ci_get '.github.workflows.server' '')"
   workflow_desktop="$(_existing_ci_get '.github.workflows.desktop' '')"
@@ -162,13 +284,21 @@ _generate_ci_config_json() {
     project_name="$(_prompt_ci_value "Project name" "${project_name}")"
     repo_url="$(_prompt_ci_value "GitHub repository URL" "${repo_url}")"
     default_branch="$(_prompt_ci_value "Default branch" "${default_branch}")"
-    docker_registry="$(_prompt_ci_value "Docker registry" "${docker_registry}")"
-    docker_namespace="$(_prompt_ci_value "Docker namespace/user" "${docker_namespace}")"
+    if [[ -z "${global_profile}" && "${DEFER_CONNECTION}" != "true" ]]; then
+      docker_registry="$(_prompt_ci_value "Docker registry" "${docker_registry}")"
+      docker_namespace="$(_prompt_ci_value "Docker namespace/user" "${docker_namespace}")"
+    fi
     image_prefix="$(_prompt_ci_value "Docker image prefix/repository" "${image_prefix}")"
-    deploy_host="$(_prompt_ci_value "Deploy host" "${deploy_host}")"
-    deploy_user="$(_prompt_ci_value "Deploy user" "${deploy_user}")"
-    deploy_path="$(_prompt_ci_value "Deploy path on server" "${deploy_path}")"
-    deploy_key_path="$(_prompt_ci_value "Local deploy SSH private key path" "${deploy_key_path}")"
+    if [[ -z "${global_profile}" && "${DEFER_CONNECTION}" != "true" ]]; then
+      deploy_host="$(_prompt_ci_value "Deploy host" "${deploy_host}")"
+      deploy_user="$(_prompt_ci_value "Deploy user" "${deploy_user}")"
+    fi
+    if [[ "${DEFER_CONNECTION}" != "true" ]]; then
+      deploy_path="$(_prompt_ci_value "Deploy path on server" "${deploy_path}")"
+    fi
+    if [[ -z "${global_profile}" && "${DEFER_CONNECTION}" != "true" ]]; then
+      deploy_key_path="$(_prompt_ci_value "Local deploy SSH private key path" "${deploy_key_path}")"
+    fi
     local_env_file="$(_prompt_ci_value "Local CI/deploy env file" "${local_env_file}")"
     workflow_server="$(_prompt_ci_value "Server workflow file" "${workflow_server}")"
     workflow_desktop="$(_prompt_ci_value "Desktop workflow file" "${workflow_desktop}")"
@@ -187,6 +317,7 @@ _generate_ci_config_json() {
 
   jq -n \
     --arg generated_at "$(ops_timestamp)" \
+    --arg global_profile "${global_profile}" \
     --arg project_name "${project_name}" \
     --arg repo_url "${repo_url}" \
     --arg default_branch "${default_branch}" \
@@ -200,6 +331,7 @@ _generate_ci_config_json() {
     --arg deploy_path "${deploy_path}" \
     --arg deploy_key_path "${deploy_key_path}" \
     --arg local_env_file "${local_env_file}" \
+    --argjson connection_deferred "${DEFER_CONNECTION}" \
     --argjson github_secrets "${github_secrets}" \
     --argjson docker_secrets "${docker_secrets}" \
     --argjson deploy_secrets "${deploy_secrets}" \
@@ -207,6 +339,8 @@ _generate_ci_config_json() {
       version: "1",
       generated_at: $generated_at,
       source: "ops_ci_setup",
+      global_profile: $global_profile,
+      connection_deferred: $connection_deferred,
       project: {name: $project_name},
       github: {
         repository: $repo_url,
@@ -235,12 +369,16 @@ _generate_ci_config_json() {
     }'
 }
 
-_ci_config_json() {
+_ci_config_raw_json() {
   if [[ -f "${OPS_CI_CONFIG_FILE}" ]]; then
     cat "${OPS_CI_CONFIG_FILE}"
   else
     _generate_ci_config_json
   fi
+}
+
+_ci_config_json() {
+  global_profile_resolve_ci_json "$(_ci_config_raw_json)"
 }
 
 _write_ci_config() {
@@ -252,9 +390,54 @@ _write_ci_config() {
   ops_ok "Wrote ${OPS_CI_CONFIG_FILE#${OPS_PROJECT_ROOT}/}"
 }
 
+_remote_docker_login() {
+  local registry="$1" config_json host user key_path target remote_command
+  local -a ssh_args=("-t" "-o" "ConnectTimeout=${CONNECT_TIMEOUT}")
+  config_json="$(_ci_config_json)"
+  host="${DEPLOY_HOST:-$(jq -r '.deploy.host // ""' <<< "${config_json}")}"
+  user="${DEPLOY_USER:-$(jq -r '.deploy.user // ""' <<< "${config_json}")}"
+  key_path="${DEPLOY_SSH_KEY_PATH:-$(jq -r '.deploy.ssh_key_path // ""' <<< "${config_json}")}"
+  [[ -n "${host}" && -n "${user}" ]] ||
+    die "Deploy host/user are required before remote Docker login." 2
+  if [[ -n "${key_path}" && "${key_path}" != "null" ]]; then
+    ssh_args+=("-i" "$(_expand_path "${key_path}")")
+  fi
+  target="${user}@${host}"
+  printf -v remote_command 'docker login %q' "${registry}"
+  ops_info "Opening remote Docker login on ${target}"
+  ssh "${ssh_args[@]}" "${target}" "${remote_command}"
+}
+
+_offer_connection_readiness() {
+  [[ "${INTERACTIVE}" == "true" && "${DEFER_CONNECTION}" != "true" ]] || return 0
+
+  local config_json registry previous_interactive previous_command
+  config_json="$(_ci_config_json)"
+  if _prompt_ci_yes_no "Test SSH and remote Docker now?" "n"; then
+    previous_interactive="${INTERACTIVE}"
+    previous_command="${REMOTE_COMMAND}"
+    INTERACTIVE=false
+    REMOTE_COMMAND='docker info >/dev/null && docker compose version'
+    if ! _ci_connect; then
+      ops_warn "Connection test failed; configuration was kept so it can be corrected."
+    fi
+    INTERACTIVE="${previous_interactive}"
+    REMOTE_COMMAND="${previous_command}"
+  fi
+
+  registry="$(jq -r '.docker.registry // "docker.io"' <<< "${config_json}")"
+  if _prompt_ci_yes_no "Authenticate this machine with ${registry} now?" "n"; then
+    command -v docker >/dev/null 2>&1 || die "docker CLI is required for registry login." 2
+    docker login "${registry}"
+  fi
+  if _prompt_ci_yes_no "Authenticate the remote Docker host with ${registry} now?" "n"; then
+    _remote_docker_login "${registry}"
+  fi
+}
+
 _merge_deploy_config_json() {
   local host="$1" user="$2" path="$3" key_path="$4"
-  _ci_config_json | jq \
+  _ci_config_raw_json | jq \
     --arg host "${host}" \
     --arg user "${user}" \
     --arg path "${path}" \
@@ -345,8 +528,16 @@ _ci_value() {
 }
 
 _print_ci_summary() {
-  local config_json="$1"
+  local config_json="$1" resolved_json
+  resolved_json="$(global_profile_resolve_ci_json "${config_json}")"
   jq -r '
+    "Deployment connection: " +
+      (if .connection_deferred == true then "<deferred>"
+       elif ((.global_profile // "") | length) > 0 then .global_profile
+       else "<project-only>" end),
+    "Global profile: " +
+      (if ((.global_profile // "") | length) > 0 then .global_profile
+       else "<project-only>" end),
     "Project: " + (.project.name // "") ,
     "Repository: " + (.github.repository // "<unset>"),
     "Default branch: " + (.github.default_branch // "<unset>"),
@@ -361,7 +552,7 @@ _print_ci_summary() {
     "Deploy key path: " + (.deploy.ssh_key_path // "<unset>"),
     "Local env file: " + (.secrets.local_env_file // ".ops.project/secrets/ci.env"),
     "Expected GitHub secrets: " + ((.github.secrets | to_entries | map(.value) | unique | join(", ")) // "")
-  ' <<< "${config_json}"
+  ' <<< "${resolved_json}"
 }
 
 _is_unset() {
@@ -470,7 +661,7 @@ _check_ci_credentials() {
 
   docker_registry="${DOCKER_REGISTRY:-$(jq -r '.docker.registry // "docker.io"' <<< "${config_json}")}"
   docker_namespace="${DOCKER_NAMESPACE:-$(jq -r '.docker.namespace // ""' <<< "${config_json}")}"
-  docker_username="${DOCKER_USERNAME:-}"
+  docker_username="${DOCKER_USERNAME:-$(jq -r '.docker.username // ""' <<< "${config_json}")}"
   docker_password="${DOCKER_PASSWORD:-}"
   github_repository="${GITHUB_REPOSITORY:-$(jq -r '.github.repository // ""' <<< "${config_json}")}"
   deploy_host="$(_ci_value '.deploy.host' DEPLOY_HOST)"
@@ -781,6 +972,7 @@ case "${SUBCMD}" in
     printf '\n'
     if [[ "${APPLY}" == "true" ]]; then
       _write_ci_config "${config_json}"
+      _offer_connection_readiness
     else
       ops_info "Preview only. Use --apply to write .ops.project/config/ci.json."
     fi

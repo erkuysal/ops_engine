@@ -72,6 +72,9 @@ between formats deliberately.
 ## Version-control policy
 
 - Keep `config/` and intentionally shared `profiles/` reviewable.
+- `config/ci.json.global_profile` is a portable index into the current
+  machine's `${XDG_CONFIG_HOME:-~/.config}/ops/profiles/<id>.json`; global
+  connection metadata and credential references are not copied into projects.
 - Ignore `generated/`, `logs/`, `run/`, `secrets/`, and `.history/`.
 - Regenerate missing discovery, run-plan, environment, shim, and binary outputs
   rather than restoring them from Git.

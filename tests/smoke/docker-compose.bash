@@ -37,4 +37,27 @@ suite_docker_compose() {
   assert_jq_eq "node service config keeps compose files" \
     '.services[] | select(.id == "web") | .compose_files | join(",")' \
     "${root}/.ops.project/config/services.json" "web/docker-compose.yml"
+
+  root="$(fixture_copy workspace-root-compose)"
+  assert_ok "workspace root compose setup preview" \
+    ops_run "${root}" setup --dry-run
+  assert_ok "workspace root compose setup apply" \
+    ops_run "${root}" setup --apply
+
+  discovery_file="${root}/.ops.project/generated/discovery.json"
+  assert_jq_eq "root compose service uses normalized project name" \
+    '.directories[] | select(.path == ".") | .id' \
+    "${discovery_file}" "hemak"
+  assert_jq_eq "root compose service is docker group" \
+    '.services[] | select(.path == ".") | [.stack,.role,.runner.kind] | join(",")' \
+    "${root}/.ops.project/config/services.json" "docker,docker_group,compose"
+  assert_jq_eq "root compose keeps base and production files" \
+    '.services[] | select(.path == ".") | .compose_files | join(",")' \
+    "${root}/.ops.project/config/services.json" "docker-compose.yml,deployment/compose/production.yml"
+  assert_jq_eq "workspace discovers root and node development services" \
+    '[.services[].id] | sort | join(",")' \
+    "${root}/.ops.project/config/services.json" "backend,frontend,hemak"
+  assert_jq_eq "frontend depends on backend" \
+    '.services[] | select(.id == "frontend") | .depends_on | join(",")' \
+    "${root}/.ops.project/config/services.json" "backend"
 }

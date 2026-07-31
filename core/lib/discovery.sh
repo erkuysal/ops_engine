@@ -28,15 +28,54 @@ _discovery_docker_compose_files_json() {
     docker-compose.yaml
     docker-compose.override.yml
     docker-compose.override.yaml
+    deployment/compose/production.yml
+    deployment/compose/production.yaml
   )
 
   for file in "${candidates[@]}"; do
     [[ -f "${abs_path}/${file}" ]] || continue
-    rel="${rel_path}/${file}"
+    if [[ "${rel_path}" == "." ]]; then
+      rel="${file}"
+    else
+      rel="${rel_path}/${file}"
+    fi
     files_json="$(jq --arg file "${rel}" '. + [$file]' <<< "${files_json}")"
   done
 
   printf '%s' "${files_json}"
+}
+
+_discovery_normalize_id() {
+  local raw="${1:-project}"
+  raw="${raw##*/}"
+  raw="$(printf '%s' "${raw}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+  printf '%s' "${raw:-project}"
+}
+
+_discovery_root_compose_json() {
+  local compose_files project_name root_id
+  compose_files="$(_discovery_docker_compose_files_json "." "${OPS_PROJECT_ROOT}")"
+  [[ "$(jq 'length' <<< "${compose_files}")" -gt 0 ]] || return 0
+
+  project_name="$(jq -r '.name // empty' "${OPS_PROJECT_ROOT}/package.json" 2>/dev/null || true)"
+  [[ -n "${project_name}" ]] || project_name="$(basename "${OPS_PROJECT_ROOT}")"
+  root_id="$(_discovery_normalize_id "${project_name}")"
+
+  jq -n \
+    --arg id "${root_id}" \
+    --argjson compose_files "${compose_files}" \
+    '{
+      id: $id,
+      path: ".",
+      stack: "docker",
+      role: "docker_group",
+      service: true,
+      confidence: 0.95,
+      score: 3,
+      compose_files: $compose_files,
+      runner: {kind: "compose"},
+      evidence: ["root docker compose"]
+    }'
 }
 
 _discovery_node_json() {
@@ -120,6 +159,7 @@ _discovery_node_json() {
       confidence: ($confidence | tonumber),
       score: $score,
       package: {name: $package_name, framework: $framework, scripts: $scripts},
+      deps: $deps,
       compose_files: $compose_files,
       evidence: $evidence
     }'
@@ -244,7 +284,13 @@ discovery_scan_project_json() {
   require_bins jq
 
   local entries_json='[]'
-  local id rel_path stack score abs_path entry_json
+  local id rel_path stack score abs_path entry_json root_entry root_id
+
+  root_entry="$(_discovery_root_compose_json)"
+  if [[ -n "${root_entry}" ]]; then
+    root_entry="$(env_discovery_attach_to_entry_json "${root_entry}" ".")"
+    entries_json="$(jq --argjson entry "${root_entry}" '. + [$entry]' <<< "${entries_json}")"
+  fi
 
   while IFS=$'\t' read -r id rel_path stack score; do
     [[ -z "${id}" ]] && continue
@@ -257,6 +303,13 @@ discovery_scan_project_json() {
     entry_json="$(env_discovery_attach_to_entry_json "${entry_json}" "${rel_path}")"
     entries_json="$(jq --arg id "${id}" --argjson entry "${entry_json}" '. + [$entry + {id: $id}]' <<< "${entries_json}")"
   done < <(detect_scan_project)
+
+  if [[ -n "${root_entry}" ]]; then
+    root_id="$(jq -r '.[0].id' <<< "${entries_json}")"
+    if [[ "$(jq --arg id "${root_id}" '[.[] | select(.id == $id)] | length' <<< "${entries_json}")" -gt 1 ]]; then
+      entries_json="$(jq --arg id "${root_id}" '.[0].id = ($id + "-compose")' <<< "${entries_json}")"
+    fi
+  fi
 
   jq -n \
     --arg generated_at "$(ops_timestamp)" \
