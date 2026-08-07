@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ops aggregate profiles config",
+  "type": "object",
+  "required": ["version", "profiles"],
+  "properties": {
+    "version": { "const": 1 },
+    "generated_at": { "type": "string" },
+    "default_profile": { "type": "string" },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "remote": {
+            "type": "object",
+            "properties": {
+              "host": { "type": "string" },
+              "user": { "type": "string" },
+              "path": { "type": "string" },
+              "ssh_key_path": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "docker": {
+            "type": "object",
+            "properties": {
+              "network": { "type": "string" },
+              "compose_files": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          },
+          "healthchecks": { "type": "object" },
+          "certificates": {
+            "type": "object",
+            "properties": {
+              "provider": { "type": "string" },
+              "domain": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,10 +1,47 @@
 name: CI
 
 on:
-  # Automatic CI is intentionally disabled while validation is run locally.
   workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - root
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  static:
+    name: Syntax and JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install JSON tooling
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Check Bash syntax
+        run: find core tests -type f \( -name '*.sh' -o -name '*.bash' \) -print0 | xargs -0 -n1 bash -n
+
+      - name: Check repository JSON
+        run: find schemas templates tests/fixtures -type f -name '*.json' -print0 | xargs -0 -n1 jq empty
+
+  schema:
+    name: JSON Schema contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install JSON Schema validator
+        run: npm install --global ajv-cli@5.0.0
+
+      - name: Validate schema contracts
+        run: bash tests/schema/run.sh
+
   smoke:
     name: Smoke tests
     runs-on: ubuntu-latest

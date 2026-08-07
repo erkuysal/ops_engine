@@ -16,6 +16,27 @@ config_validate_available() {
   project_config_services_exists
 }
 
+_config_validate_version() {
+  local file="$1" label="$2" err_fn="$3" warn_fn="$4"
+  local version_type version_value
+
+  if ! jq -e 'type == "object"' "${file}" >/dev/null 2>&1; then
+    "$err_fn" "${label} — must contain a JSON object"
+    return 0
+  fi
+
+  version_type="$(jq -r '.version | type' "${file}" 2>/dev/null || printf 'missing')"
+  version_value="$(jq -r '.version // empty' "${file}" 2>/dev/null || true)"
+  if [[ "${version_type}" == "number" && "${version_value}" == "1" ]]; then
+    return 0
+  fi
+  if [[ "${version_type}" == "string" && "${version_value}" == "1" ]]; then
+    "$warn_fn" "${label} — legacy string version \"1\"; regenerate config to store integer 1"
+    return 0
+  fi
+  "$err_fn" "${label} — version must be integer 1"
+}
+
 config_validate_run() {
   local err_fn="${1:?config_validate_run: error function name required}"
   local warn_fn="${2:?config_validate_run: warn function name required}"
@@ -33,6 +54,11 @@ config_validate_run() {
   local profiles_file="${OPS_PROJECT_CONFIG_PROFILES_FILE}"
   local project_file="${OPS_PROJECT_CONFIG_PROJECT_FILE}"
   local ci_file="${OPS_PROJECT_CONFIG_DIR}/ci.json"
+
+  _config_validate_version "${services_file}" "services.json" "$err_fn" "$warn_fn"
+  [[ -f "${project_file}" ]] && _config_validate_version "${project_file}" "project.json" "$err_fn" "$warn_fn"
+  [[ -f "${settings_file}" ]] && _config_validate_version "${settings_file}" "settings.json" "$err_fn" "$warn_fn"
+  [[ -f "${profiles_file}" ]] && _config_validate_version "${profiles_file}" "profiles.json" "$err_fn" "$warn_fn"
 
   # Structural: services.json
   if ! jq -e '.services | type == "array"' "${services_file}" >/dev/null 2>&1; then

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "services": [
+    {
+      "id": "broken",
+      "stack": "unknown-stack",
+      "path": "missing-service",
+      "depends_on": ["also-missing"]
+    }
+  ]
+}

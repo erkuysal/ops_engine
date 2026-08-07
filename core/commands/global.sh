@@ -157,7 +157,7 @@ _use_profile() {
   local file config_json resolved
   file="$(_project_ci_file)"
   if [[ -f "${file}" ]]; then config_json="$(cat "${file}")"; else
-    config_json="$(jq -n --arg name "$(basename "${OPS_PROJECT_ROOT}")" '{version:"1",project:{name:$name},docker:{image_prefix:$name},deploy:{},secrets:{local_env_file:".ops.project/secrets/ci.env"}}')"
+    config_json="$(jq -n --arg name "$(basename "${OPS_PROJECT_ROOT}")" '{version:1,project:{name:$name},docker:{image_prefix:$name},deploy:{},secrets:{local_env_file:".ops.project/secrets/ci.env"}}')"
   fi
   config_json="$(jq --arg ref "${PROFILE_ID}" --arg path "${PROJECT_PATH}" --arg generated_at "$(ops_timestamp)" '
     .global_profile = $ref

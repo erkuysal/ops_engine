@@ -208,7 +208,7 @@ run_plan_generate_json() {
   build_outputs_json="$(_run_plan_build_outputs_json "${service_id}")"
 
   jq -n \
-    --arg version "1" \
+    --argjson version 1 \
     --arg generated_at "$(ops_timestamp)" \
     --arg project_root "${OPS_PROJECT_ROOT}" \
     --arg state_dir "${OPS_PROJECT_STATE_DIR}" \

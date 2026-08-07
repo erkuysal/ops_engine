@@ -19,12 +19,24 @@ HARNESS_FIXTURES=()
 
 require_bins() {
   local bin
+  local missing=()
   for bin in "$@"; do
-    command -v "${bin}" >/dev/null 2>&1 || {
-      printf 'harness: required tool not found: %s\n' "${bin}" >&2
-      exit 2
-    }
+    command -v "${bin}" >/dev/null 2>&1 || missing+=("${bin}")
   done
+
+  [[ ${#missing[@]} -eq 0 ]] && return 0
+
+  printf 'harness: missing required tools: %s\n' "${missing[*]}" >&2
+  for bin in "${missing[@]}"; do
+    case "${bin}" in
+      bash) printf '  bash: install Bash 4.3 or newer\n' >&2 ;;
+      jq)   printf '  jq:   https://jqlang.github.io/jq/download/\n' >&2 ;;
+      yq)   printf '  yq:   install mikefarah/yq v4\n' >&2 ;;
+      *)    printf '  %s: install it and ensure it is on PATH\n' "${bin}" >&2 ;;
+    esac
+  done
+  printf 'See docs/development.md for the complete test prerequisites.\n' >&2
+  exit 2
 }
 
 require_bins bash jq yq
@@ -43,6 +55,24 @@ ops_run() {
     OPS_PLAIN=true \
     CI=true \
     OPS_NON_INTERACTIVE=true \
+    bash "${OPS_CORE_ROOT}/main.sh" "$@"
+  )
+}
+
+ops_run_interactive() {
+  local project_root="$1"
+  shift
+  (
+    # Match ops_run isolation while leaving stdin attached to the caller's prompt input.
+    unset OPS_PROJECT_STATE_DIR OPS_PROJECT_LOG_DIR OPS_PROJECT_RUN_DIR OPS_PROJECT_GENERATED_DIR
+    unset OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
+    unset OPS_PROJECT_CONFIG_SETTINGS_FILE OPS_PROJECT_CONFIG_PROFILES_FILE OPS_PROJECT_HISTORY_DIR
+    unset OPS_PROJECT_SETUP_GENERATED_FILE OPS_PROJECT_SETUP_GENERATED_LEGACY_FILE OPS_PROFILES_DIR
+    OPS_PROJECT_ROOT="${project_root}" \
+    OPS_CORE_ROOT="${OPS_CORE_ROOT}" \
+    OPS_PLAIN=true \
+    CI=false \
+    OPS_NON_INTERACTIVE=false \
     bash "${OPS_CORE_ROOT}/main.sh" "$@"
   )
 }

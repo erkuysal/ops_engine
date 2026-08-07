@@ -336,7 +336,7 @@ _generate_ci_config_json() {
     --argjson docker_secrets "${docker_secrets}" \
     --argjson deploy_secrets "${deploy_secrets}" \
     '{
-      version: "1",
+      version: 1,
       generated_at: $generated_at,
       source: "ops_ci_setup",
       global_profile: $global_profile,

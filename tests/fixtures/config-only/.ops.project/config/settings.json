@@ -1,5 +1,5 @@
 {
-  "version": "1",
+  "version": 1,
   "settings": {
     "run": {
       "default_mode": "foreground"
@@ -10,7 +10,19 @@
     }
   },
   "setup": {
-    "python_manager": "",
-    "python_env": ""
+    "default_profile": "local",
+    "scaffold": {
+      "type": "",
+      "package_manager": "",
+      "template": ""
+    },
+    "runtimes": {
+      "python": {
+        "manager": "",
+        "env": "",
+        "fallbacks": []
+      }
+    },
+    "services": {}
   }
 }

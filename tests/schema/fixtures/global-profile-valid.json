@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "personal-vps",
+  "updated_at": "2026-08-07T00:00:00Z",
+  "deploy": {
+    "host": "deploy.example.test",
+    "user": "deploy",
+    "path_template": "/srv/{project}",
+    "ssh_key_path": "~/.ssh/id_ed25519"
+  },
+  "docker": {
+    "registry": "registry.example.test",
+    "namespace": "example",
+    "username": "deploy"
+  }
+}

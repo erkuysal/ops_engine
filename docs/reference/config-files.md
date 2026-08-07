@@ -81,6 +81,12 @@ between formats deliberately.
 - Use `ops backup` for local config snapshots; backup history is not repository
   source.
 
+## Schema versions
+
+Generated JSON config uses integer `1` for its schema version. Older files with
+the string value `"1"` remain readable; `ops validate` warns that they should be
+regenerated. Aggregate config contracts live in `schemas/*-config.schema.json`.
+
 Source: `core/lib/manifest_sync.sh`
 
 ## See also

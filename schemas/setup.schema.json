@@ -11,9 +11,33 @@
       "properties": {
         "name": { "type": "string" },
         "default_profile": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
-    "runtimes": { "type": "object" },
+    "scaffold": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "package_manager": { "type": "string" },
+        "template": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "runtimes": {
+      "type": "object",
+      "properties": {
+        "python": {
+          "type": "object",
+          "properties": {
+            "manager": { "type": "string" },
+            "env": { "type": "string" },
+            "fallbacks": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    },
     "services": {
       "type": "object",
       "additionalProperties": {
@@ -25,9 +49,13 @@
             "type": "array",
             "items": { "type": "string" }
           },
-          "runtime": { "type": "string" }
-        }
+          "runtime": { "type": "string" },
+          "role": { "type": "string" },
+          "django": { "type": "object" }
+        },
+        "additionalProperties": false
       }
     }
-  }
+  },
+  "additionalProperties": false
 }

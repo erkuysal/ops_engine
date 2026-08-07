@@ -427,6 +427,7 @@ ops start <service_id> --dry-run
 
 Near-term direction:
 
+- implement shipping execution with receipts, resume, verification, and rollback
 - continue hardening `.ops.project/config` as the primary source for project facts
 - keep `.ops.yaml` limited to optional export/import compatibility
 - improve the guided setup wizard with better module summaries

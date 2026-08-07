@@ -9,7 +9,14 @@ How to change the ops package and verify behavior from a consuming repository.
 - Bash 4+
 - `jq` (required by setup, run-plan, discovery)
 - `yq` (YAML compatibility import/export and fallback validation)
+- `ajv-cli` 5.x (JSON Schema contract tests only)
 - Stack-specific tools when testing those stacks (e.g. `go`, `node`, `python`)
+
+Install the optional schema-test dependency with:
+
+```bash
+npm install --global ajv-cli@5.0.0
+```
 
 ## Repository layout
 
@@ -48,11 +55,14 @@ From the `.ops` repository root:
 
 ```bash
 bash tests/run.sh
+bash tests/schema/run.sh
 ```
 
 Fixtures under `tests/fixtures/` are minimal fake projects (Go process group, Node
-workspace, config-only validate). CI runs the same suite on Ubuntu via
-`.github/workflows/ci.yml`.
+workspace, config-only validate). CI runs Bash syntax checks, parses repository
+JSON, validates schema contracts and their negative fixtures, runs ShellCheck,
+and executes the same smoke suite on Ubuntu for pull requests and pushes to
+`root` via `.github/workflows/ci.yml`.
 
 When adding discovery or setup behavior, extend fixtures and smoke suites under
 `tests/smoke/` rather than relying only on a consuming monorepo.

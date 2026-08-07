@@ -11,34 +11,20 @@ Turn `ops setup` into the project intelligence command.
 In parallel, establish `ops ship` as the single continuous-delivery surface.
 The planning slice now supports schema-backed mixed Docker Compose, file-sync,
 Git-checkout, and custom-script jobs. Execution, receipts, resume, verification,
-rollback, and setup-assisted shipping configuration remain open.
+and rollback remain open. Setup-assisted shipping configuration is available
+through `ops setup shipping`.
 
-The immediate goal is:
+The immediate goals are:
 
-- `ops setup --dry-run` can discover a project even when `.ops.yaml` is missing
-- discovery writes structured facts to `.ops.project/generated/discovery.json`
-- setup can distinguish services from workspace roots and shared libraries
-- setup can propose project config from discovery
-- setup can apply discovery-derived setup into `.ops.project/config`
-- runtime helpers prefer `.ops.project/config`, with `.ops.yaml` only as
-  compatibility fallback/import/export
-- setup asks interactively only for ambiguous values
-- setup bootstraps `.ops.project/config` when `.ops.yaml` is absent
-- YAML writes happen through explicit `ops setup export-yaml --apply`
-- legacy discovery commands route through setup/discovery
-- `ops install` installs a global Bash launcher instead of doing project setup
-- runtime commands write shared run-plan artifacts before display/execution
-- setup can preview/apply dependency decisions into project config
-- ops has an initial CI credential/server metadata command
-- setup supports lightweight module routing
-- bare `ops setup` starts a guided setup sequence when run in a terminal
-- ops has a simple SSH connection check command backed by local CI/server config
-- `ops ssh --interactive --apply` can set SSH connection values directly
-- `ops ssh setup --interactive --apply` saves SSH values without opening a connection
-- ops has a focused credential readiness check for Docker, SSH deploy, and GitHub bridge values
+- implement safe shipping execution with receipts, resume, verification, and rollback
+- finish the `.ops.yaml` compatibility-boundary cleanup
+- deepen framework, package-manager, and dependency discovery
+- broaden cross-platform runtime coverage beyond Go and Node
+- keep the guided setup and deployment flows aligned with their documentation
 
 ## Recently Completed
 
+- **Schema contracts:** CI validates fragment and aggregate project/services/settings/profiles/shipping artifacts, proves invalid fixtures are rejected, and checks agreement with runtime validation. Newly generated schema versions use integer `1`; legacy string versions remain readable with a warning.
 - **Config sync:** `ops setup export-yaml`, `ops setup import-yaml`, config-first `ops validate` (`core/lib/manifest_sync.sh`).
 - **Cross-shell runtime:** `run_cross_shell_binary` wired into Go and Node stacks for WSL + Windows tools.
 - **Setup inference:** port inference (Django/Phoenix/Vite), Vite-proxy dependency inference, healthcheck URLs from ports.
@@ -177,8 +163,8 @@ The immediate goal is:
 
 **Still open:**
 
-- Deeper env file discovery
-- Docker Compose service groups and compose-native dependencies
+- Richer env-file precedence and framework-specific env signals
+- Compose-native dependency inference across multi-file service groups
 - Richer framework/package-manager signals in probes
 - Dependency interview parity with legacy `init` flows
 
@@ -221,7 +207,10 @@ The immediate goal is:
 - **Slice C — Setup inference:** port inference, Vite proxy dependency inference, setup port merge fix
 - **Contributor docs:** `CONTRIBUTING.md` and comprehensive `docs/` tree
 
-## Planned Implementation Slices
+## Completed Foundation Slices
+
+These slices are retained as a concise implementation history. Current work is
+tracked in **Current Focus** and **Active Problems** above.
 
 ### Slice 1: Add Discovery Cache
 
@@ -243,8 +232,8 @@ Status: completed for first pass
 Notes:
 
 - `ops setup discover --apply` now writes `.ops.project/generated/discovery.json`.
-- Discovery is structured but not yet consumed to generate `.ops.project/config`.
-- Existing `bootstrap`, `init`, and `update` still use the old `detect_scan_project` path.
+- Discovery is consumed by setup to generate `.ops.project/config`.
+- `bootstrap`, `init`, and `update` are compatibility wrappers around setup-backed flows.
 
 ### Slice 2: Improve Node Detection
 
@@ -291,7 +280,7 @@ Notes:
 
 - Go modules with multiple `cmd/*/main.go` entries are classified as `process_group`.
 - Build outputs are inferred into discovery.
-- Discovery currently sees `worker-webhook`; current runtime config still starts only gateway/api/sweeper/debouncer until we decide whether webhook belongs in local runtime.
+- Ambiguous processes are recorded as setup decisions and disabled until confirmed.
 
 ### Slice 4: Setup Proposal From Discovery
 
@@ -422,11 +411,8 @@ Dependency inference is heuristic (Vite proxy + dev-script ports). Review with
 
 ## Open Decisions
 
-- Should `.ops.project/config` use one combined `project.json` or split files?
 - What remaining helper APIs should be renamed or wrapped away from `manifest_*`?
 - Should setup always create `.ops.project`, even in dry-run mode?
-- How should confirmed interactive answers be represented?
-- Should global `ops install` copy the whole package or reference a source checkout?
 - Should process group runtime support per-process env overrides in the first pass?
 - Should shared libraries be included in config as non-runtime nodes?
 

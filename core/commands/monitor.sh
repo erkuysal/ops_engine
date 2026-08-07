@@ -573,7 +573,7 @@ _monitor_config_json() {
   targets="$(_apply_target_host_overrides_json "${targets}")"
 
   jq -n \
-    --arg version "1" \
+    --argjson version 1 \
     --arg generated_at "$(ops_timestamp)" \
     --arg source "ops_monitor_setup" \
     --arg env_file "${INFRA_ENV_REL}" \

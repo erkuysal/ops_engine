@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ops aggregate settings config",
+  "type": "object",
+  "required": ["version", "settings"],
+  "properties": {
+    "version": { "const": 1 },
+    "generated_at": { "type": "string" },
+    "source": { "type": "string" },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "type": "object",
+          "properties": {
+            "default_mode": { "enum": ["foreground", "background"] }
+          },
+          "additionalProperties": false
+        },
+        "start": {
+          "type": "object",
+          "properties": {
+            "mode": { "enum": ["foreground", "background"] },
+            "with_deps": { "type": "boolean" },
+            "preview": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "lines": { "type": "integer", "minimum": 0 },
+                "wait_seconds": { "type": "integer", "minimum": 0 }
+              },
+              "additionalProperties": false
+            },
+            "healthcheck": {
+              "type": "object",
+              "properties": {
+                "wait": { "type": "boolean" },
+                "timeout_seconds": { "type": "integer", "minimum": 1 },
+                "interval_seconds": { "type": "integer", "minimum": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "setup": {
+      "type": "object",
+      "properties": {
+        "default_profile": { "type": "string" },
+        "scaffold": { "type": "object" },
+        "runtimes": { "type": "object" },
+        "services": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

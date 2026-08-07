@@ -453,7 +453,7 @@ _project_base_json() {
   fi
 
   jq -n \
-    --arg version "1" \
+    --argjson version 1 \
     --arg generated_at "$(ops_timestamp)" \
     --arg name "${project_name}" \
     --arg root "${OPS_PROJECT_ROOT}" \
@@ -621,7 +621,7 @@ _resolve_process_decisions_json() {
   jq -n \
     --arg generated_at "$(ops_timestamp)" \
     --argjson decisions "${decisions_json}" \
-    '{version: "1", generated_at: $generated_at, decisions: $decisions}'
+    '{version: 1, generated_at: $generated_at, decisions: $decisions}'
 }
 
 _apply_discovery_decisions_json() {
@@ -932,7 +932,7 @@ _resolve_dependency_decisions_json() {
     --argjson existing "${decisions_json}" \
     --argjson dependency_decisions "${dependency_decisions}" \
     '{
-      version: "1",
+      version: 1,
       generated_at: $generated_at,
       decisions: ((($existing.decisions // []) | map(select(.type != "dependency"))) + $dependency_decisions)
     }'
@@ -1182,7 +1182,7 @@ _generate_project_config_json_from_discovery() {
   global_env_files="$(jq -c '.global_env_files // []' <<< "${discovery_json}")"
 
   jq -n \
-    --arg version "1" \
+    --argjson version 1 \
     --arg generated_at "$(ops_timestamp)" \
     --arg name "${project_name}" \
     --arg root "${OPS_PROJECT_ROOT}" \
@@ -1246,7 +1246,7 @@ _generate_services_config_json_from_discovery() {
         reduce $extra[] as $item
           ($base; if index($item) then . else . + [$item] end);
     {
-      version: "1",
+      version: 1,
       generated_at: $generated_at,
       source: "setup_discovery",
       services: [
@@ -1343,13 +1343,13 @@ _materialize_project_config_from_discovery() {
     --arg source "setup_discovery" \
     --argjson settings "${settings_json}" \
     --argjson setup "${setup_json}" \
-    '{version: "1", generated_at: $generated_at, source: $source, settings: $settings, setup: $setup}' \
+    '{version: 1, generated_at: $generated_at, source: $source, settings: $settings, setup: $setup}' \
     > "${OPS_PROJECT_CONFIG_DIR}/settings.json"
   jq -n \
     --arg generated_at "$(ops_timestamp)" \
     --arg profile "${PROFILE}" \
     --argjson profile_config "${profile_json}" \
-    '{version: "1", generated_at: $generated_at, default_profile: $profile, profiles: {($profile): $profile_config}}' \
+    '{version: 1, generated_at: $generated_at, default_profile: $profile, profiles: {($profile): $profile_config}}' \
     > "${OPS_PROJECT_CONFIG_DIR}/profiles.json"
 
   ops_ok "Materialized .ops.project/config/project.json"
@@ -1378,7 +1378,7 @@ _generate_manifest_json_from_discovery() {
     --argjson services_config "${services_config}" \
     --argjson global_env_files "${global_env_files}" \
     '{
-      version: "1",
+      version: 1,
       project: {
         name: $project_name,
         global_env_files: $global_env_files,

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "start": {
+    "mode": "sometimes",
+    "with_deps": "yes"
+  }
+}

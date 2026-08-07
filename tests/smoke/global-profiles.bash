@@ -71,9 +71,7 @@ suite_global_profiles() {
   selected_root="$(fixture_copy config-only)"
   if printf '1\n\n\n\n\n\n\n\n\n' |
       OPS_GLOBAL_CONFIG_HOME="${global_home}" \
-      OPS_PROJECT_ROOT="${selected_root}" OPS_CORE_ROOT="${OPS_CORE_ROOT}" \
-      OPS_PLAIN=true CI=false OPS_NON_INTERACTIVE=false \
-      bash "${OPS_CORE_ROOT}/main.sh" ci setup --interactive --apply; then
+      ops_run_interactive "${selected_root}" ci setup --interactive --apply; then
     assert_eq "interactive setup selects a saved connection" "true" "true"
   else
     assert_eq "interactive setup selects a saved connection" "true" "false"
@@ -86,9 +84,7 @@ suite_global_profiles() {
   HARNESS_FIXTURES+=("${created_home}")
   if printf '1\nnew-vps\nvps.example.test\ndeploy\n/srv/{project}\n/keys/new-vps\nghcr.io\nacme\nacme\n\n\n\n\n\n\n\n\n\nn\nn\n' |
       OPS_GLOBAL_CONFIG_HOME="${created_home}" \
-      OPS_PROJECT_ROOT="${created_root}" OPS_CORE_ROOT="${OPS_CORE_ROOT}" \
-      OPS_PLAIN=true CI=false OPS_NON_INTERACTIVE=false \
-      bash "${OPS_CORE_ROOT}/main.sh" ci setup --interactive --apply; then
+      ops_run_interactive "${created_root}" ci setup --interactive --apply; then
     assert_eq "interactive setup creates a reusable connection" "true" "true"
   else
     assert_eq "interactive setup creates a reusable connection" "true" "false"

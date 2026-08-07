@@ -127,7 +127,7 @@ _backup_create() {
   fi
 
   jq -n \
-    --arg version "1" \
+    --argjson version 1 \
     --arg id "${id}" \
     --arg label "${label}" \
     --arg created_at "$(ops_timestamp)" \

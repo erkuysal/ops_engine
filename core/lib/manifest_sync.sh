@@ -42,7 +42,7 @@ manifest_json_from_project_config() {
   [[ -f "${OPS_PROJECT_CONFIG_DIR}/ci.json" ]] && ci_json="$(cat "${OPS_PROJECT_CONFIG_DIR}/ci.json")" || ci_json='{}'
 
   jq -n \
-    --arg version "1" \
+    --argjson version 1 \
     --argjson project "${project_json}" \
     --argjson services "${services_json}" \
     --argjson settings "${settings_only}" \
@@ -120,7 +120,7 @@ manifest_import_yaml() {
   [[ -z "${project_name}" || "${project_name}" == "null" ]] && project_name="$(basename "${OPS_PROJECT_ROOT}")"
 
   jq -n \
-    --arg version "1" \
+    --argjson version 1 \
     --arg generated_at "$(ops_timestamp)" \
     --arg name "${project_name}" \
     --arg root "${OPS_PROJECT_ROOT}" \
@@ -139,7 +139,7 @@ manifest_import_yaml() {
   services_wrapped="$(jq -n \
     --arg generated_at "$(ops_timestamp)" \
     --argjson services "$(jq -c '.services // []' <<< "${manifest_json}")" \
-    '{version: "1", generated_at: $generated_at, source: "import_yaml", services: $services}')"
+    '{version: 1, generated_at: $generated_at, source: "import_yaml", services: $services}')"
   printf '%s\n' "${services_wrapped}" > "${OPS_PROJECT_CONFIG_SERVICES_FILE}"
 
   setup_json="$(jq -c '.setup // {}' <<< "${manifest_json}")"
@@ -149,7 +149,7 @@ manifest_import_yaml() {
     --arg source "import_yaml" \
     --argjson settings "${settings_json}" \
     --argjson setup "${setup_json}" \
-    '{version: "1", generated_at: $generated_at, source: $source, settings: $settings, setup: $setup}' \
+    '{version: 1, generated_at: $generated_at, source: $source, settings: $settings, setup: $setup}' \
     > "${OPS_PROJECT_CONFIG_SETTINGS_FILE}"
 
   default_profile="$(jq -r '.setup.default_profile // "local"' <<< "${manifest_json}")"
@@ -159,7 +159,7 @@ manifest_import_yaml() {
     --arg generated_at "$(ops_timestamp)" \
     --arg profile "${default_profile}" \
     --argjson profiles "${profiles_json}" \
-    '{version: "1", generated_at: $generated_at, default_profile: $profile, profiles: $profiles}' \
+    '{version: 1, generated_at: $generated_at, default_profile: $profile, profiles: $profiles}' \
     > "${OPS_PROJECT_CONFIG_PROFILES_FILE}"
 
   if jq -e '.ci // null | type == "object"' <<< "${manifest_json}" >/dev/null 2>&1; then
