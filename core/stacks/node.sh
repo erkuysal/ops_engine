@@ -8,13 +8,15 @@ _NODE_STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_NODE_STACK_DIR}/../lib/init.sh"
 # shellcheck source=../lib/cross_shell.sh
 source "${_NODE_STACK_DIR}/../lib/cross_shell.sh"
+# shellcheck source=../lib/command_exec.sh
+source "${_NODE_STACK_DIR}/../lib/command_exec.sh"
 
 node_dispatch() {
   local action="${1:-}"
   local explicit_cmd="${2:-}"
 
   if [[ -n "${explicit_cmd}" && "${explicit_cmd}" != "null" ]]; then
-    eval "${explicit_cmd}"
+    ops_run_configured_command "${explicit_cmd}"
     return $?
   fi
 

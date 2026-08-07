@@ -28,6 +28,10 @@ Stack file must define:
 
 Example: `elixir-phoenix` → `elixir_phoenix_dispatch`.
 
+All stack adapters delegate configured action strings to
+`core/lib/command_exec.sh`. Do not execute them with `eval`; the shared helper
+runs the command in a child shell and preserves its exit status.
+
 ## Special cases
 
 - **go** — `process_group` runner: multiple binaries from `build.outputs` and `run.processes`

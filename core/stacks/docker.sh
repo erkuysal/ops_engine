@@ -8,6 +8,8 @@ _DOCKER_STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_DOCKER_STACK_DIR}/../lib/init.sh"
 # shellcheck source=../lib/manifest.sh
 source "${_DOCKER_STACK_DIR}/../lib/manifest.sh"
+# shellcheck source=../lib/command_exec.sh
+source "${_DOCKER_STACK_DIR}/../lib/command_exec.sh"
 
 _docker_collect_compose_files() {
   local files=() file
@@ -43,7 +45,7 @@ docker_dispatch() {
   local explicit_cmd="${2:-}"
 
   if [[ -n "${explicit_cmd}" && "${explicit_cmd}" != "null" ]]; then
-    eval "${explicit_cmd}"
+    ops_run_configured_command "${explicit_cmd}"
     return $?
   fi
 

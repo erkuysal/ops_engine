@@ -8,6 +8,8 @@ _GO_STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_GO_STACK_DIR}/../lib/init.sh"
 # shellcheck source=../lib/cross_shell.sh
 source "${_GO_STACK_DIR}/../lib/cross_shell.sh"
+# shellcheck source=../lib/command_exec.sh
+source "${_GO_STACK_DIR}/../lib/command_exec.sh"
 # shellcheck source=../lib/manifest.sh
 source "${_GO_STACK_DIR}/../lib/manifest.sh"
 
@@ -266,7 +268,7 @@ go_dispatch() {
   local explicit_cmd="${2:-}"
 
   if [[ -n "${explicit_cmd}" && "${explicit_cmd}" != "null" ]]; then
-    eval "${explicit_cmd}"
+    ops_run_configured_command "${explicit_cmd}"
     return $?
   fi
 

@@ -136,7 +136,7 @@ ops_info "Run plan: ${RUN_PLAN_FILE#${OPS_PROJECT_ROOT}/}"
 # 1. Setup command from .ops.project / .ops.yaml (for start)
 # 2. Local override: .ops/commands/<service>/<action>.sh
 # 3. Stack strategy: .ops-core/stacks/<stack>.sh
-# 4. Explicit command: .ops.yaml action string
+# 4. Configured action command from project config or YAML compatibility input
 
 _ensure_runtime_file() {
   local file="$1"
@@ -332,8 +332,11 @@ _run_selected_isolated() {
   local code=0
 
   ops_info "${label}"
-  _run_isolated "cd $(_shell_quote "${cwd}") && ${cmd}"
-  code=$?
+  if _run_isolated "cd $(_shell_quote "${cwd}") && ${cmd}"; then
+    code=0
+  else
+    code=$?
+  fi
   _exit_from_run_code "${code}"
 }
 
@@ -344,8 +347,11 @@ _run_selected_script() {
   local code=0
 
   ops_info "${label}"
-  _run_isolated "cd $(_shell_quote "${cwd}") && $(_shell_quote "${script_path}")"
-  code=$?
+  if _run_isolated "cd $(_shell_quote "${cwd}") && $(_shell_quote "${script_path}")"; then
+    code=0
+  else
+    code=$?
+  fi
   _exit_from_run_code "${code}"
 }
 
@@ -375,14 +381,19 @@ _run_selected_legacy_bridge() {
   done
 
   ops_info "Running selected legacy bridge: scripts/${target_script}"
-  _run_isolated "cd $(_shell_quote "${OPS_PROJECT_ROOT}") && bash $(_shell_quote "${OPS_PROJECT_ROOT}/scripts/${target_script}")${args_cmd}"
-  code=$?
+  if _run_isolated "cd $(_shell_quote "${OPS_PROJECT_ROOT}") && bash $(_shell_quote "${OPS_PROJECT_ROOT}/scripts/${target_script}")${args_cmd}"; then
+    code=0
+  else
+    code=$?
+  fi
   _exit_from_run_code "${code}"
 }
 
 _run_selected_stack() {
   local code=0
   local stack_file stack_dispatch_func legacy_target
+  local q_abs_path q_stack_file q_dispatch q_action q_explicit q_legacy
+  local q_service_id q_project_root q_stack
 
   stack_file="$(_run_plan_get '.resolution.candidates.stack_dispatcher.path')"
   stack_dispatch_func="$(_run_plan_get '.resolution.candidates.stack_dispatcher.function')"
@@ -393,52 +404,66 @@ _run_selected_stack() {
     exit 2
   fi
 
-  SUBSHELL_CMD=$(cat <<EOF
-  cd $(_shell_quote "${ABS_PATH}") || exit 3
-  source $(_shell_quote "${stack_file}")
+  q_abs_path="$(_shell_quote "${ABS_PATH}")"
+  q_stack_file="$(_shell_quote "${stack_file}")"
+  q_dispatch="$(_shell_quote "${stack_dispatch_func}")"
+  q_action="$(_shell_quote "${ACTION}")"
+  q_explicit="$(_shell_quote "${EXPLICIT_CMD}")"
+  q_legacy="$(_shell_quote "${legacy_target}")"
+  q_service_id="$(_shell_quote "${SVC_ID}")"
+  q_project_root="$(_shell_quote "${OPS_PROJECT_ROOT}")"
+  q_stack="$(_shell_quote "${STACK}")"
 
-  if type '${stack_dispatch_func}' >/dev/null 2>&1; then
-    '${stack_dispatch_func}' '${ACTION}' '${EXPLICIT_CMD}'
+  SUBSHELL_CMD=$(cat <<EOF
+  cd ${q_abs_path} || exit 3
+  source ${q_stack_file}
+  PROJECT_ROOT=${q_project_root}
+
+  if type ${q_dispatch} >/dev/null 2>&1; then
+    ${q_dispatch} ${q_action} ${q_explicit}
     CODE=\$?
     if [[ \$CODE -eq 10 ]]; then
-      if [[ -n '${EXPLICIT_CMD}' && '${EXPLICIT_CMD}' != 'null' ]]; then
-        eval '${EXPLICIT_CMD}'
+      if [[ -n ${q_explicit} && ${q_explicit} != null ]]; then
+        ops_run_configured_command ${q_explicit}
         CODE=\$?
       else
-        TARGET_SCRIPT='${legacy_target}'
+        TARGET_SCRIPT=${q_legacy}
         if [[ -n "\${TARGET_SCRIPT}" && "\${TARGET_SCRIPT}" != "null" ]]; then
           echo "[INFO] Bridging to legacy script: scripts/\${TARGET_SCRIPT}" >&2
 
           BRIDGE_ARGS=()
-          case "${ACTION}" in
+          case ${q_action} in
             build|deploy|staging|release|update|publish|hotswap)
-              BRIDGE_ARGS+=("--services" "${SVC_ID}")
+              BRIDGE_ARGS+=("--services" ${q_service_id})
               ;;
             *)
-              BRIDGE_ARGS+=("${SVC_ID}")
+              BRIDGE_ARGS+=(${q_service_id})
               ;;
           esac
 
-          cd "${OPS_PROJECT_ROOT}" || exit 3
-          bash "${OPS_PROJECT_ROOT}/scripts/\${TARGET_SCRIPT}" "\${BRIDGE_ARGS[@]}"
+          cd "\${PROJECT_ROOT}" || exit 3
+          bash "\${PROJECT_ROOT}/scripts/\${TARGET_SCRIPT}" "\${BRIDGE_ARGS[@]}"
           CODE=\$?
           exit \$CODE
         fi
 
-        echo "[ERROR] Action '${ACTION}' is neither implemented by stack '${STACK}', explicitly defined in manifest, nor bridged in scripts/commands.sh" >&2
+        printf '[ERROR] Action %s is neither implemented by stack %s, explicitly configured, nor bridged in scripts/commands.sh\n' ${q_action} ${q_stack} >&2
         exit 2
       fi
     fi
     exit \$CODE
   else
-    echo "[ERROR] Stack file '${stack_file}' missing dispatch function '${stack_dispatch_func}'" >&2
+    printf '[ERROR] Stack file %s missing dispatch function %s\n' ${q_stack_file} ${q_dispatch} >&2
     exit 2
   fi
 EOF
 )
 
-  _run_isolated "${SUBSHELL_CMD}"
-  code=$?
+  if _run_isolated "${SUBSHELL_CMD}"; then
+    code=0
+  else
+    code=$?
+  fi
   _exit_from_run_code "${code}"
 }
 
@@ -470,4 +495,3 @@ case "${SELECTED_STRATEGY}" in
 esac
 
 exit 0
-

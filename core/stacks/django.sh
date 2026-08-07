@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+_DJANGO_STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/command_exec.sh
+source "${_DJANGO_STACK_DIR}/../lib/command_exec.sh"
+
 # Contract: called with ACTION as $1 and EXPLICIT_CMD as $2
 # Returns 10 (not-implemented) if action is unknown and no explicit command exists.
 django_dispatch() {
@@ -11,7 +15,7 @@ django_dispatch() {
   local explicit_cmd="${2:-}"
 
   if [[ -n "${explicit_cmd}" && "${explicit_cmd}" != "null" ]]; then
-    eval "${explicit_cmd}"
+    ops_run_configured_command "${explicit_cmd}"
     return $?
   fi
 

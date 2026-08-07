@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "source": "test_fixture",
+  "services": [
+    {
+      "id": "quoted",
+      "name": "Quoted Command",
+      "stack": "custom",
+      "path": "service with spaces",
+      "runner": { "kind": "stack" },
+      "actions": {
+        "verify": "printf '%s\\n' \"single'quote and spaces\" > command-output.txt; printf '%s\\n' '$(not executed)' >> command-output.txt; printf '%s\\n' \"$(printf substitution-ok)\" >> command-output.txt; printf '%s\\n' \"$OPS_SERVICE_ID:$OPS_ACTION\" >> command-output.txt",
+        "multiline": "value='line one'\nprintf '%s\\n' \"$value\" > multiline-output.txt",
+        "fail": "exit 23"
+      },
+      "depends_on": [],
+      "env_files": []
+    }
+  ]
+}

@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # .ops-core/stacks/custom.sh — Custom (user-defined) stack strategy stub.
-# When stack=custom, the action command string from .ops.yaml is executed directly.
+# When stack=custom, a configured action command is executed in an isolated shell.
 
 set -euo pipefail
+
+_CUSTOM_STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/command_exec.sh
+source "${_CUSTOM_STACK_DIR}/../lib/command_exec.sh"
 
 custom_dispatch() {
   local action="${1:-}"
   local explicit_cmd="${2:-}"
 
   if [[ -n "${explicit_cmd}" && "${explicit_cmd}" != "null" ]]; then
-    eval "${explicit_cmd}"
+    ops_run_configured_command "${explicit_cmd}"
     return $?
   fi
 

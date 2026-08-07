@@ -24,6 +24,7 @@ The immediate goals are:
 
 ## Recently Completed
 
+- **Configured command hardening:** stack adapters use one isolated child-shell executor instead of `eval`; run dispatch shell-quotes command transport and tests cover embedded quotes, spaces, literal/intentional substitutions, multiline commands, and exit-code mapping.
 - **Schema contracts:** CI validates fragment and aggregate project/services/settings/profiles/shipping artifacts, proves invalid fixtures are rejected, and checks agreement with runtime validation. Newly generated schema versions use integer `1`; legacy string versions remain readable with a warning.
 - **Config sync:** `ops setup export-yaml`, `ops setup import-yaml`, config-first `ops validate` (`core/lib/manifest_sync.sh`).
 - **Cross-shell runtime:** `run_cross_shell_binary` wired into Go and Node stacks for WSL + Windows tools.

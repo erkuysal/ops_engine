@@ -49,6 +49,8 @@ source "${SCRIPT_DIR}/smoke/healthcheck.bash"
 source "${SCRIPT_DIR}/smoke/docker-compose.bash"
 # shellcheck source=smoke/runner-profiles.bash
 source "${SCRIPT_DIR}/smoke/runner-profiles.bash"
+# shellcheck source=smoke/command-exec.bash
+source "${SCRIPT_DIR}/smoke/command-exec.bash"
 # shellcheck source=smoke/global-profiles.bash
 source "${SCRIPT_DIR}/smoke/global-profiles.bash"
 # shellcheck source=smoke/container-pipeline.bash
@@ -75,6 +77,7 @@ suite_setup_check
 suite_healthcheck
 suite_docker_compose
 suite_runner_profiles
+suite_command_exec
 suite_global_profiles
 suite_container_pipeline
 suite_shipping

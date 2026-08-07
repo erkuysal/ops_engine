@@ -14,7 +14,7 @@ ops run start backend --foreground
 ## Source files
 
 - `core/commands/run.sh`
-- `core/lib/run_plan.sh`, `env.sh`, `preflight.sh`
+- `core/lib/run_plan.sh`, `command_exec.sh`, `env.sh`, `preflight.sh`
 
 ## Behavior
 
@@ -22,6 +22,14 @@ ops run start backend --foreground
 2. Generates run plan JSON and writes to `.ops.project/generated/run-plans/`.
 3. Runs preflight checks.
 4. Dispatches by `selected_strategy` (stack, override, legacy bridge).
+
+Configured action strings intentionally support Bash syntax such as pipelines,
+redirects, and substitutions. They are transported with shell-safe quoting and
+executed exactly once by a child Bash process. They do not run through `eval`
+inside the orchestrator shell.
+
+Configured actions are trusted project code, not a security sandbox. Only run
+configuration reviewed with the repository.
 
 ## Exit codes
 
@@ -37,6 +45,7 @@ ops run start backend --foreground
 ```bash
 ./ops.sh show start <service_id>
 ./ops.sh run start <service_id> --mode foreground
+bash tests/run.sh  # includes quote/substitution/multiline transport coverage
 ```
 
 ## See also

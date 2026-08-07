@@ -58,7 +58,7 @@ done
 validate_ok "${OPS_REPO_ROOT}/schemas/shipping.schema.json" \
   "${OPS_REPO_ROOT}/tests/fixtures/container-pipeline/.ops.project/config/shipping.json"
 
-for fixture in config-only container-pipeline; do
+for fixture in config-only configured-command container-pipeline; do
   config_dir="${OPS_REPO_ROOT}/tests/fixtures/${fixture}/.ops.project/config"
   validate_ok "${OPS_REPO_ROOT}/schemas/project-config.schema.json" "${config_dir}/project.json"
   validate_ok "${OPS_REPO_ROOT}/schemas/services-config.schema.json" "${config_dir}/services.json"

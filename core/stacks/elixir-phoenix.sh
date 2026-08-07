@@ -4,12 +4,16 @@
 
 set -euo pipefail
 
+_ELIXIR_STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/command_exec.sh
+source "${_ELIXIR_STACK_DIR}/../lib/command_exec.sh"
+
 elixir_phoenix_dispatch() {
   local action="${1:-}"
   local explicit_cmd="${2:-}"
 
   if [[ -n "${explicit_cmd}" && "${explicit_cmd}" != "null" ]]; then
-    eval "${explicit_cmd}"
+    ops_run_configured_command "${explicit_cmd}"
     return $?
   fi
 
