@@ -62,9 +62,9 @@ case "${MODE}" in
 esac
 
 # â”€â”€ Validate Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-require_manifest_or_config
+project_require_config_or_yaml
 
-if ! manifest_list_services | grep -qFx "${SVC_ID}"; then
+if ! project_list_services | grep -qFx "${SVC_ID}"; then
   ops_error "Unknown service: '${SVC_ID}'"
   exit 2
 fi
@@ -133,7 +133,7 @@ ops_info "Run plan: ${RUN_PLAN_FILE#${OPS_PROJECT_ROOT}/}"
 
 # â”€â”€ Resolve Strategy & Execute â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Command resolution:
-# 1. Setup command from .ops.project / .ops.yaml (for start)
+# 1. Setup command from project config (or YAML compatibility fallback) for start
 # 2. Local override: .ops/commands/<service>/<action>.sh
 # 3. Stack strategy: .ops-core/stacks/<stack>.sh
 # 4. Configured action command from project config or YAML compatibility input

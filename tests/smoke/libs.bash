@@ -2,7 +2,7 @@
 # Unit-style tests for sourced library helpers.
 
 suite_libs() {
-  local root output precedence_output
+  local root output precedence_output structured_output
 
   # cross_shell path detection
   OPS_PROJECT_ROOT="$(fixture_copy config-only)"
@@ -65,6 +65,47 @@ suite_libs() {
     *"env_count=0"*) assert_eq "project aliases read project env count" "true" "true" ;;
     *) assert_eq "project aliases read project env count" "true" "false" ;;
   esac
+
+  root="$(fixture_copy go-process-group-config)"
+  structured_output="$(
+    OPS_PROJECT_ROOT="${root}" OPS_CORE_ROOT="${OPS_CORE_ROOT}" OPS_PLAIN=true CI=true bash -c '
+      set -euo pipefail
+      unset OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
+      source "${OPS_CORE_ROOT}/lib/init.sh"
+      source "${OPS_CORE_ROOT}/lib/manifest.sh"
+      project_get_service_json_field backend build.outputs "[]" |
+        jq -r "map(.name) | join(\",\")"
+    '
+  )"
+  assert_eq "project JSON accessor reads structured config field" "api,gateway" "${structured_output}"
+
+  root="$(fixture_copy config-only)"
+  rm -rf "${root}/.ops.project/config"
+  mkdir -p "${root}"
+  cat > "${root}/.ops.yaml" <<'YAML'
+project:
+  name: yaml-project
+services:
+  - id: backend
+    name: Backend
+    stack: go
+    path: backend
+    build:
+      outputs:
+        - name: api
+          package: ./cmd/api
+YAML
+  structured_output="$(
+    OPS_PROJECT_ROOT="${root}" OPS_CORE_ROOT="${OPS_CORE_ROOT}" OPS_PLAIN=true CI=true bash -c '
+      set -euo pipefail
+      unset OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
+      source "${OPS_CORE_ROOT}/lib/init.sh"
+      source "${OPS_CORE_ROOT}/lib/manifest.sh"
+      project_get_service_json_field backend build.outputs "[]" |
+        jq -r ".[0].package"
+    '
+  )"
+  assert_eq "project JSON accessor reads structured YAML fallback" "./cmd/api" "${structured_output}"
 
   root="$(fixture_copy config-only)"
   cat > "${root}/.ops.yaml" <<'YAML'

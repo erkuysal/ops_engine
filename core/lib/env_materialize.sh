@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # .ops-core/lib/env_materialize.sh — Env file materialization helpers.
 #
-# Supports two materialization modes declared in .ops.yaml:
+# Supports materialization modes declared in project config or YAML fallback:
 #   symlink        — create/update <service_path>/.env → <source_file>
 #   generated_file — write ephemeral .ops.project/generated/env/<service>.env from assembled context
 #
@@ -27,7 +27,7 @@ env_materialize_symlink() {
   local source_rel="${2:?env_materialize_symlink: source file required}"
 
   local svc_path
-  svc_path="$(manifest_get_service_field "${service_id}" path)"
+  svc_path="$(project_get_service_field "${service_id}" path)"
   local abs_svc="${OPS_PROJECT_ROOT}/${svc_path}"
   local abs_src="${OPS_PROJECT_ROOT}/${source_rel}"
   local link_path="${abs_svc}/.env"
@@ -61,7 +61,7 @@ env_materialize_symlink() {
 env_materialize_symlink_cleanup() {
   local service_id="${1:?env_materialize_symlink_cleanup: service id required}"
   local svc_path
-  svc_path="$(manifest_get_service_field "${service_id}" path)"
+  svc_path="$(project_get_service_field "${service_id}" path)"
   local link_path="${OPS_PROJECT_ROOT}/${svc_path}/.env"
 
   if [[ -L "${link_path}" ]]; then
@@ -144,7 +144,7 @@ env_materialize_dispatch() {
   shift
 
   local mode
-  mode="$(manifest_get_service_field "${service_id}" env_materialization 2>/dev/null || true)"
+  mode="$(project_get_service_field "${service_id}" env_materialization 2>/dev/null || true)"
   [[ -z "${mode}" || "${mode}" == "null" ]] && mode="none"
 
   case "${mode}" in
@@ -153,7 +153,7 @@ env_materialize_dispatch() {
       ;;
     symlink)
       local output_file
-      output_file="$(manifest_get_service_field "${service_id}" env_output_file 2>/dev/null || true)"
+      output_file="$(project_get_service_field "${service_id}" env_output_file 2>/dev/null || true)"
       [[ -z "${output_file}" || "${output_file}" == "null" ]] && \
         die "services.${service_id}.env_output_file must be set when env_materialization=symlink"
       env_materialize_symlink "${service_id}" "${output_file}" "$@"

@@ -65,7 +65,7 @@ _run_plan_service_processes_json() {
   while IFS= read -r proc; do
     [[ -z "${proc}" || "${proc}" == "null" ]] && continue
     processes_json="$(jq -c --arg name "${proc}" '. + [{name: $name}]' <<<"${processes_json}")"
-  done < <(manifest_get_service_list_field "${service_id}" "run.processes.name" 2>/dev/null || true)
+  done < <(project_get_service_list_field "${service_id}" "run.processes.name" 2>/dev/null || true)
 
   printf '%s' "${processes_json}"
 }
@@ -73,14 +73,7 @@ _run_plan_service_processes_json() {
 _run_plan_build_outputs_json() {
   local service_id="${1:?_run_plan_build_outputs_json: service id required}"
   local outputs_json="[]"
-
-  if project_config_services_exists; then
-    outputs_json="$(jq -c --arg id "${service_id}" '
-      (.services[]? | select(.id == $id) | .build.outputs) // []
-    ' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || printf '[]')"
-  else
-    outputs_json="$(yq e -o=json ".services[] | select(.id == \"${service_id}\") | .build.outputs // []" "${OPS_MANIFEST}" 2>/dev/null || printf '[]')"
-  fi
+  outputs_json="$(project_get_service_json_field "${service_id}" build.outputs '[]')"
 
   [[ -n "${outputs_json}" && "${outputs_json}" != "null" ]] && printf '%s' "${outputs_json}" || printf '[]'
 }
@@ -92,7 +85,7 @@ run_plan_generate_json() {
 
   require_bins jq
 
-  if ! manifest_list_services | grep -qFx "${service_id}"; then
+  if ! project_list_services | grep -qFx "${service_id}"; then
     die "Unknown service: '${service_id}'" 2
   fi
 
@@ -108,11 +101,11 @@ run_plan_generate_json() {
   local global_override_exists global_override_executable stack_file_exists
   local processes_json build_outputs_json
 
-  svc_name="$(manifest_get_service_field "${service_id}" name)"
-  svc_path="$(manifest_get_service_field "${service_id}" path)"
-  stack="$(manifest_get_service_field "${service_id}" stack)"
-  runner_kind="$(manifest_get_service_field "${service_id}" "runner.kind")"
-  explicit_cmd="$(manifest_get_service_field "${service_id}" "actions.${action}")"
+  svc_name="$(project_get_service_field "${service_id}" name)"
+  svc_path="$(project_get_service_field "${service_id}" path)"
+  stack="$(project_get_service_field "${service_id}" stack)"
+  runner_kind="$(project_get_service_field "${service_id}" "runner.kind")"
+  explicit_cmd="$(project_get_service_field "${service_id}" "actions.${action}")"
   abs_path="${OPS_PROJECT_ROOT}/${svc_path}"
   svc_override="${OPS_PROJECT_ROOT}/.ops/commands/${service_id}/${action}.sh"
   global_override="${OPS_PROJECT_ROOT}/.ops/commands/${action}.sh"
@@ -201,9 +194,9 @@ run_plan_generate_json() {
     selected_strategy="unresolved"
   fi
 
-  build_output_dir="$(manifest_get_service_field "${service_id}" 'build.output_dir')"
-  build_target_os="$(manifest_get_service_field "${service_id}" 'build.target_os')"
-  build_target_arch="$(manifest_get_service_field "${service_id}" 'build.target_arch')"
+  build_output_dir="$(project_get_service_field "${service_id}" 'build.output_dir')"
+  build_target_os="$(project_get_service_field "${service_id}" 'build.target_os')"
+  build_target_arch="$(project_get_service_field "${service_id}" 'build.target_arch')"
   processes_json="$(_run_plan_service_processes_json "${service_id}")"
   build_outputs_json="$(_run_plan_build_outputs_json "${service_id}")"
 

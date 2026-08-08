@@ -86,7 +86,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_bins jq
-require_manifest_or_config
+project_require_config_or_yaml
 if [[ "${PULL_ONLY}" == "true" ]]; then
   NO_START=true
 fi

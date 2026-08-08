@@ -133,7 +133,7 @@ env_assemble_context() {
 
   # Effective env_policy for this service
   local svc_policy
-  svc_policy="$(manifest_get_service_field "${service_id}" env_policy 2>/dev/null || true)"
+  svc_policy="$(project_get_service_field "${service_id}" env_policy 2>/dev/null || true)"
   [[ -z "${svc_policy}" || "${svc_policy}" == "null" ]] && svc_policy="dev_file"
 
   # ci_system policy → skip all file layers
@@ -170,7 +170,7 @@ env_assemble_context() {
     fi
     _env_assert_within_root "${abs_ef}"
     _env_load_file "${abs_ef}" "service:${ef}"
-  done < <(manifest_get_service_list_field "${service_id}" env_files 2>/dev/null || true)
+  done < <(project_get_service_list_field "${service_id}" env_files 2>/dev/null || true)
 
   # Layers 4 & 5 reserved for Phase 3 (action-scoped + CLI --env overrides)
 
@@ -196,7 +196,7 @@ env_exec() {
   env_assemble_context "${service_id}" ${ci_flag}
 
   local svc_path
-  svc_path="$(manifest_get_service_field "${service_id}" path)"
+  svc_path="$(project_get_service_field "${service_id}" path)"
   local abs_path="${OPS_PROJECT_ROOT}/${svc_path}"
   require_within_root "${abs_path}"
 
@@ -317,11 +317,11 @@ env_doctor_check() {
     else
       ops_ok    "  env_files — ok: '${ef}'"
     fi
-  done < <(manifest_get_service_list_field "${service_id}" env_files 2>/dev/null || true)
+  done < <(project_get_service_list_field "${service_id}" env_files 2>/dev/null || true)
 
   # Policy info
   local policy
-  policy="$(manifest_get_service_field "${service_id}" env_policy 2>/dev/null || true)"
+  policy="$(project_get_service_field "${service_id}" env_policy 2>/dev/null || true)"
   [[ -z "${policy}" || "${policy}" == "null" ]] && policy="dev_file"
   ops_info "  env_policy: ${policy}"
 
@@ -335,7 +335,7 @@ env_doctor_check() {
   if [[ "${policy}" == "dev_file" ]]; then
     local global_count svc_count
     global_count="$(project_global_env_file_count)"
-    svc_count="$(manifest_get_service_field "${service_id}" 'env_files | length' 2>/dev/null || echo 0)"
+    svc_count="$(project_get_service_json_field "${service_id}" env_files '[]' | jq -r 'length' 2>/dev/null || echo 0)"
     if [[ "${global_count}" == "0" && ("${svc_count}" == "0" || -z "${svc_count}") ]]; then
       ops_warn "  No env files declared at any layer (env_policy=dev_file but no files configured)"
       warnings=$((warnings+1))

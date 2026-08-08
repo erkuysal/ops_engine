@@ -33,7 +33,7 @@ runner_is_managed_kind() {
 runner_service_managed() {
   local service_id="${1:?runner_service_managed: service id required}"
   local kind
-  kind="$(manifest_get_service_field "${service_id}" "runner.kind" 2>/dev/null || true)"
+  kind="$(project_get_service_field "${service_id}" "runner.kind" 2>/dev/null || true)"
   runner_is_managed_kind "${kind}"
 }
 

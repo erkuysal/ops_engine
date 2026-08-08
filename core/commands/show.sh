@@ -66,9 +66,9 @@ if [[ -z "${ACTION}" || -z "${SVC_ID}" ]]; then
   exit 2
 fi
 
-require_manifest_or_config
+project_require_config_or_yaml
 
-if ! manifest_list_services | grep -qFx "${SVC_ID}"; then
+if ! project_list_services | grep -qFx "${SVC_ID}"; then
   die "Unknown service: '${SVC_ID}'" 2
 fi
 
@@ -80,11 +80,11 @@ _run_plan_get() {
   jq -r "${expr} // \"\"" <<<"${RUN_PLAN_JSON}"
 }
 
-SVC_NAME="$(manifest_get_service_field "${SVC_ID}" name)"
-SVC_PATH="$(manifest_get_service_field "${SVC_ID}" path)"
-STACK="$(manifest_get_service_field "${SVC_ID}" stack)"
-RUNNER_KIND="$(manifest_get_service_field "${SVC_ID}" "runner.kind")"
-EXPLICIT_CMD="$(manifest_get_service_field "${SVC_ID}" "actions.${ACTION}")"
+SVC_NAME="$(project_get_service_field "${SVC_ID}" name)"
+SVC_PATH="$(project_get_service_field "${SVC_ID}" path)"
+STACK="$(project_get_service_field "${SVC_ID}" stack)"
+RUNNER_KIND="$(project_get_service_field "${SVC_ID}" "runner.kind")"
+EXPLICIT_CMD="$(project_get_service_field "${SVC_ID}" "actions.${ACTION}")"
 ABS_PATH="${OPS_PROJECT_ROOT}/${SVC_PATH}"
 SVC_OVERRIDE="${OPS_PROJECT_ROOT}/.ops/commands/${SVC_ID}/${ACTION}.sh"
 GLOBAL_OVERRIDE="${OPS_PROJECT_ROOT}/.ops/commands/${ACTION}.sh"
@@ -227,7 +227,7 @@ _print_env_files() {
     any=true
     printf '  service: %s (%s)\n' "${item}" "$(_bool_file "${OPS_PROJECT_ROOT}/${item}")"
     _warn_if_deploy_env_for_profile "${item}"
-  done < <(manifest_get_service_list_field "${SVC_ID}" env_files 2>/dev/null || true)
+  done < <(project_get_service_list_field "${SVC_ID}" env_files 2>/dev/null || true)
 
   [[ "${any}" == "true" ]] || printf '  none\n'
 }
@@ -236,10 +236,10 @@ _print_go_process_group_plan() {
   [[ "${STACK}" == "go" && "${RUNNER_KIND}" == "process_group" ]] || return 0
 
   printf '\nGo Process Group\n'
-  printf '  output dir: %s\n' "$(manifest_get_service_field "${SVC_ID}" 'build.output_dir')"
+  printf '  output dir: %s\n' "$(project_get_service_field "${SVC_ID}" 'build.output_dir')"
   printf '  target: %s/%s\n' \
-    "$(manifest_get_service_field "${SVC_ID}" 'build.target_os')" \
-    "$(manifest_get_service_field "${SVC_ID}" 'build.target_arch')"
+    "$(project_get_service_field "${SVC_ID}" 'build.target_os')" \
+    "$(project_get_service_field "${SVC_ID}" 'build.target_arch')"
   if command -v go >/dev/null 2>&1; then
     printf '  go binary: %s\n' "$(command -v go)"
     printf '  go host: %s\n' "$(tool_host_os go)"
@@ -249,7 +249,7 @@ _print_go_process_group_plan() {
   printf '  logs: .ops.project/logs/%s/<process>.log\n' "${SVC_ID}"
   printf '  pids: .ops.project/run/%s/<process>.pid\n' "${SVC_ID}"
   printf '  processes:\n'
-  manifest_get_service_list_field "${SVC_ID}" "run.processes.name" 2>/dev/null |
+  project_get_service_list_field "${SVC_ID}" "run.processes.name" 2>/dev/null |
     while IFS= read -r proc; do
       [[ -n "${proc}" && "${proc}" != "null" ]] && printf '    - %s\n' "${proc}"
     done

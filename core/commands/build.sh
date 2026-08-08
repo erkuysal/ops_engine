@@ -79,7 +79,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_bins jq
-require_manifest_or_config
+project_require_config_or_yaml
 container_load_ci_env
 [[ -n "${TAG}" ]] || TAG="$(container_default_tag)"
 

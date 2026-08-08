@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# .ops-core/lib/manifest.sh — YAML manifest loader for .ops.yaml (Phase 1+).
+# .ops-core/lib/manifest.sh — config-first project access layer.
 #
-# Requires: yq (mikefarah v4+), init.sh (sourced first)
-# All functions that read the manifest call require_manifest first.
-# yq is called lazily — install it before using validate/bootstrap.
+# Requires: jq for project config; yq (mikefarah v4+) for YAML fallback;
+# init.sh must be sourced first. Dependencies are loaded lazily.
 
 # Compatibility boundary:
-# - manifest_* names remain for legacy callers.
-# - project_* aliases are preferred for new config-first runtime code.
+# - project_* functions own config-first runtime reads.
+# - manifest_* names are compatibility wrappers for legacy callers.
 # - require_manifest is for explicit YAML compatibility paths only.
 set -euo pipefail
 if [[ "${_OPS_CORE_MANIFEST_LOADED:-}" == "1" ]]; then return 0; fi
@@ -50,6 +49,12 @@ _manifest_yq_or_empty() {
   local result
   result="$(_manifest_yq "${1} // \"\"")"
   printf '%s' "${result}"
+}
+
+_manifest_yq_json() {
+  require_bins yq
+  local expr="${1:?_manifest_yq_json: yq expression required}"
+  yq e -o=json -I=0 "${expr}" "${OPS_MANIFEST}"
 }
 
 # ============================================================================
@@ -97,20 +102,21 @@ manifest_cleanup_validation_source() {
 }
 
 # Require project ops state: .ops.project/config/services.json or .ops.yaml.
-require_manifest_or_config() {
+project_require_config_or_yaml() {
   if project_config_services_exists; then
     return 0
   fi
   require_manifest
 }
 
-project_require_config_or_yaml() {
-  require_manifest_or_config
+# Legacy compatibility wrapper.
+require_manifest_or_config() {
+  project_require_config_or_yaml
 }
 
-# Return 0 if a service with the given ID is declared in the manifest.
-manifest_service_exists() {
-  local id="${1:?manifest_service_exists: service id required}"
+# Return 0 if a service with the given ID is declared in project config.
+project_service_exists() {
+  local id="${1:?project_service_exists: service id required}"
   local result=""
   if project_config_services_exists; then
     require_bins jq
@@ -123,8 +129,9 @@ manifest_service_exists() {
   [[ -n "${result}" ]]
 }
 
-project_service_exists() {
-  manifest_service_exists "$@"
+# Legacy compatibility wrapper.
+manifest_service_exists() {
+  project_service_exists "$@"
 }
 
 # ============================================================================
@@ -132,10 +139,10 @@ project_service_exists() {
 # ============================================================================
 
 # Get a project-level field value.
-# Usage: manifest_get_project_field name
-# Usage: manifest_get_project_field global_env_files
-manifest_get_project_field() {
-  local field="${1:?manifest_get_project_field: field required}"
+# Usage: project_get_field name
+# Usage: project_get_field global_env_files
+project_get_field() {
+  local field="${1:?project_get_field: field required}"
   if [[ -f "${OPS_PROJECT_CONFIG_PROJECT_FILE}" ]]; then
     require_bins jq
     jq -r --arg field "${field}" '
@@ -149,8 +156,9 @@ manifest_get_project_field() {
   _manifest_yq_or_empty ".project.${field}"
 }
 
-project_get_field() {
-  manifest_get_project_field "$@"
+# Legacy compatibility wrapper.
+manifest_get_project_field() {
+  project_get_field "$@"
 }
 
 # Print project global env files, one item per line, preferring .ops.project/config.
@@ -177,7 +185,7 @@ project_global_env_file_count() {
 # ============================================================================
 
 # Print all declared service IDs, one per line.
-manifest_list_services() {
+project_list_services() {
   if project_config_services_exists; then
     require_bins jq
     jq -r '.services[]?.id' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true
@@ -187,8 +195,9 @@ manifest_list_services() {
   _manifest_yq '.services[].id'
 }
 
-project_list_services() {
-  manifest_list_services "$@"
+# Legacy compatibility wrapper.
+manifest_list_services() {
+  project_list_services "$@"
 }
 
 # ============================================================================
@@ -196,11 +205,11 @@ project_list_services() {
 # ============================================================================
 
 # Get a scalar field from a specific service.
-# Usage: manifest_get_service_field backend stack
-# Usage: manifest_get_service_field backend actions.start
-manifest_get_service_field() {
-  local id="${1:?manifest_get_service_field: service id required}"
-  local field="${2:?manifest_get_service_field: field path required}"
+# Usage: project_get_service_field backend stack
+# Usage: project_get_service_field backend actions.start
+project_get_service_field() {
+  local id="${1:?project_get_service_field: service id required}"
+  local field="${2:?project_get_service_field: field path required}"
   local value=""
   if project_config_services_exists; then
     require_bins jq
@@ -219,16 +228,17 @@ manifest_get_service_field() {
   _manifest_yq_or_empty ".services[] | select(.id == \"${id}\") | .${field}"
 }
 
-project_get_service_field() {
-  manifest_get_service_field "$@"
+# Legacy compatibility wrapper.
+manifest_get_service_field() {
+  project_get_service_field "$@"
 }
 
 # Get a list field from a specific service, one item per line.
-# Usage: manifest_get_service_list_field backend depends_on
-# Usage: manifest_get_service_list_field backend env_files
-manifest_get_service_list_field() {
-  local id="${1:?manifest_get_service_list_field: service id required}"
-  local field="${2:?manifest_get_service_list_field: field path required}"
+# Usage: project_get_service_list_field backend depends_on
+# Usage: project_get_service_list_field backend env_files
+project_get_service_list_field() {
+  local id="${1:?project_get_service_list_field: service id required}"
+  local field="${2:?project_get_service_list_field: field path required}"
   if project_config_services_exists; then
     require_bins jq
     jq -r --arg id "${id}" --arg field "${field}" '
@@ -248,8 +258,30 @@ manifest_get_service_list_field() {
   _manifest_yq ".services[] | select(.id == \"${id}\") | .${field}[]?" 2>/dev/null || true
 }
 
-project_get_service_list_field() {
-  manifest_get_service_list_field "$@"
+# Legacy compatibility wrapper.
+manifest_get_service_list_field() {
+  project_get_service_list_field "$@"
+}
+
+# Get any service field as compact JSON. This keeps structured config/YAML
+# compatibility handling inside the project access layer.
+# Usage: project_get_service_json_field backend build.outputs '[]'
+project_get_service_json_field() {
+  local id="${1:?project_get_service_json_field: service id required}"
+  local field="${2:?project_get_service_json_field: field path required}"
+  local default_json="${3:-null}"
+  if project_config_services_exists; then
+    require_bins jq
+    jq -c --arg id "${id}" --arg field "${field}" --argjson default "${default_json}" '
+      def getpathstr($path):
+        getpath($path | split(".") | map(if test("^[0-9]+$") then tonumber else . end));
+      (.services[]? | select(.id == $id) | getpathstr($field)) // $default
+    ' "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || printf '%s' "${default_json}"
+    return 0
+  fi
+  require_manifest
+  _manifest_yq_json ".services[] | select(.id == \"${id}\") | .${field} // ${default_json}" \
+    2>/dev/null || printf '%s' "${default_json}"
 }
 
 # ============================================================================

@@ -60,10 +60,10 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-require_manifest_or_config
+project_require_config_or_yaml
 
 if [[ -n "${TARGET}" ]]; then
-  if ! manifest_service_exists "${TARGET}"; then
+  if ! project_service_exists "${TARGET}"; then
     die "Unknown service: '${TARGET}'" 2
   fi
 fi
@@ -90,8 +90,8 @@ printf '  project config source: %s\n\n' "$(status_config_source_rel)"
 _print_row() {
   local svc_id="$1"
   local name stack state pids port health
-  name="$(manifest_get_service_field "${svc_id}" name)"
-  stack="$(manifest_get_service_field "${svc_id}" stack)"
+  name="$(project_get_service_field "${svc_id}" name)"
+  stack="$(project_get_service_field "${svc_id}" stack)"
   state="$(status_aggregate_state "${svc_id}")"
   pids="$(status_format_pids "${svc_id}")"
   port="$(status_service_port "${svc_id}")"
@@ -128,7 +128,7 @@ else
   while IFS= read -r svc_id; do
     [[ -z "${svc_id}" ]] && continue
     _print_row "${svc_id}"
-  done < <(manifest_list_services)
+  done < <(project_list_services)
 fi
 
 printf '\n'

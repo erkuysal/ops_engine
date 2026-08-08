@@ -434,13 +434,13 @@ _service_setup_port() {
 }
 
 _service_targets_json() {
-  require_manifest_or_config
+  project_require_config_or_yaml
   require_bins jq
 
   local targets='[]' svc health port
   while IFS= read -r svc; do
     [[ -z "${svc}" || "${svc}" == "null" ]] && continue
-    health="$(manifest_get_service_field "${svc}" healthcheck 2>/dev/null || true)"
+    health="$(project_get_service_field "${svc}" healthcheck 2>/dev/null || true)"
     port="$(_service_setup_port "${svc}")"
 
     if [[ -n "${health}" && "${health}" != "null" ]]; then
@@ -460,7 +460,7 @@ _service_targets_json() {
         '. + [{id: $id, service: $service, kind: "tcp", host: "127.0.0.1", port: ($port | tonumber), source: "service.port"}]' \
         <<< "${targets}")"
     fi
-  done < <(manifest_list_services)
+  done < <(project_list_services)
 
   printf '%s' "${targets}"
 }
@@ -588,7 +588,7 @@ _monitor_config_json() {
 }
 
 _run_setup() {
-  require_manifest_or_config
+  project_require_config_or_yaml
   local config_json
   _monitor_interactive_select_targets
   _validate_target_host_override_args

@@ -6,8 +6,8 @@
 # Flags:
 #   --with-deps  Start dependencies before the requested service(s) (Default)
 #   --no-deps    Only start the requested service(s)
-#   --foreground Run services in the foreground (overrides .ops.yaml settings)
-#   --background Run services in the background (overrides .ops.yaml settings)
+#   --foreground Run services in the foreground (overrides project settings)
+#   --background Run services in the background (overrides project settings)
 #   --dry-run    Print execution order without starting services
 
 set -euo pipefail
@@ -137,6 +137,7 @@ _persist_django_conda_env() {
     return 0
   fi
 
+  # YAML-only compatibility fallback for projects not yet imported to config.
   require_bins yq
   yq e -i ".setup.services.\"${service_id}\".django.conda_env = \"${env_name}\"" "${OPS_MANIFEST}"
 
@@ -197,7 +198,7 @@ _warn_deployment_env_files_for_start() {
     while IFS= read -r item; do
       [[ -z "${item}" || "${item}" == "null" ]] && continue
       _warn_deployment_env_item "${profile}" "${svc}" "${item}"
-    done < <(manifest_get_service_list_field "${svc}" env_files 2>/dev/null || true)
+    done < <(project_get_service_list_field "${svc}" env_files 2>/dev/null || true)
   done
 }
 
@@ -271,7 +272,7 @@ esac
 
 [[ "${NO_WAIT}" == "true" ]] && WAIT_FOR_HEALTH=false
 
-require_manifest_or_config
+project_require_config_or_yaml
 
 # Early cycle check ensures we don't start executing a broken graph
 graph_cycle_check
@@ -283,7 +284,7 @@ if [[ "${TARGET}" == "--all" ]]; then
   # For --all, topological sort covers everything
   read -ra EXEC_LIST <<< "$(graph_topo_sort "--all")"
 else
-  if ! printf ' %s ' "$(manifest_list_services | tr '\n' ' ')" | grep -qF " ${TARGET} "; then
+  if ! printf ' %s ' "$(project_list_services | tr '\n' ' ')" | grep -qF " ${TARGET} "; then
     ops_error "Unknown service: '${TARGET}'"
     exit 2
   fi

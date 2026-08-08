@@ -13,24 +13,10 @@ source "${_GO_STACK_DIR}/../lib/command_exec.sh"
 # shellcheck source=../lib/manifest.sh
 source "${_GO_STACK_DIR}/../lib/manifest.sh"
 
-_go_yq() {
-  local expr="${1:?yq expression required}"
-  yq e "${expr}" "${OPS_MANIFEST}"
-}
-
-_go_service_expr() {
-  local expr="${1:?service expression required}"
-  _go_yq ".services[] | select(.id == \"${OPS_SERVICE_ID}\") | ${expr}"
-}
-
 _go_service_value() {
-  local expr="${1:?service expression required}"
+  local expr="${1:?service field required}"
   local field="${expr#.}"
-  if [[ "${field}" != *"[]"* && "${field}" != *" | "* ]]; then
-    manifest_get_service_field "${OPS_SERVICE_ID}" "${field}" 2>/dev/null || true
-    return 0
-  fi
-  _go_service_expr "${expr} // \"\"" 2>/dev/null || true
+  project_get_service_field "${OPS_SERVICE_ID}" "${field}" 2>/dev/null || true
 }
 
 _go_runner_kind() {
@@ -61,33 +47,23 @@ _go_target_arch() {
 }
 
 _go_process_names() {
-  manifest_get_service_list_field "${OPS_SERVICE_ID}" "run.processes.name" 2>/dev/null || true
+  project_get_service_list_field "${OPS_SERVICE_ID}" "run.processes.name" 2>/dev/null || true
 }
 
 _go_build_output_names() {
-  manifest_get_service_list_field "${OPS_SERVICE_ID}" "build.outputs.name" 2>/dev/null || true
+  project_get_service_list_field "${OPS_SERVICE_ID}" "build.outputs.name" 2>/dev/null || true
 }
 
 _go_build_output_package() {
   local name="$1"
-  if project_config_services_exists; then
-    jq -r --arg id "${OPS_SERVICE_ID}" --arg name "${name}" \
-      '.services[]? | select(.id == $id) | .build.outputs[]? | select(.name == $name) | .package // ""' \
-      "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true
-    return 0
-  fi
-  _go_service_value ".build.outputs[] | select(.name == \"${name}\") | .package"
+  project_get_service_json_field "${OPS_SERVICE_ID}" build.outputs '[]' \
+    | jq -r --arg name "${name}" '.[]? | select(.name == $name) | .package // ""' 2>/dev/null || true
 }
 
 _go_process_command() {
   local name="$1"
-  if project_config_services_exists; then
-    jq -r --arg id "${OPS_SERVICE_ID}" --arg name "${name}" \
-      '.services[]? | select(.id == $id) | .run.processes[]? | select(.name == $name) | .command // ""' \
-      "${OPS_PROJECT_CONFIG_SERVICES_FILE}" 2>/dev/null || true
-    return 0
-  fi
-  _go_service_value ".run.processes[] | select(.name == \"${name}\") | .command"
+  project_get_service_json_field "${OPS_SERVICE_ID}" run.processes '[]' \
+    | jq -r --arg name "${name}" '.[]? | select(.name == $name) | .command // ""' 2>/dev/null || true
 }
 
 _go_log_dir() {

@@ -124,14 +124,14 @@ container_service_json_items() {
 container_service_json_from_manifest() {
   local service_id="${1:?container_service_json_from_manifest: service id required}"
   local compose_files_json build_json runner_json setup_json
-  compose_files_json="$(manifest_get_service_list_field "${service_id}" compose_files 2>/dev/null | jq -Rsc 'split("\n") | map(select(length > 0))')"
+  compose_files_json="$(project_get_service_list_field "${service_id}" compose_files 2>/dev/null | jq -Rsc 'split("\n") | map(select(length > 0))')"
   build_json="$(jq -n \
-    --arg context "$(manifest_get_service_field "${service_id}" "build.context" 2>/dev/null || true)" \
-    --arg dockerfile "$(manifest_get_service_field "${service_id}" "build.dockerfile" 2>/dev/null || true)" \
-    --arg image "$(manifest_get_service_field "${service_id}" "build.image" 2>/dev/null || true)" \
-    --arg deploy_context "$(manifest_get_service_field "${service_id}" "deploy.context" 2>/dev/null || true)" \
-    --arg deploy_dockerfile "$(manifest_get_service_field "${service_id}" "deploy.dockerfile" 2>/dev/null || true)" \
-    --arg deploy_image "$(manifest_get_service_field "${service_id}" "deploy.image" 2>/dev/null || true)" \
+    --arg context "$(project_get_service_field "${service_id}" "build.context" 2>/dev/null || true)" \
+    --arg dockerfile "$(project_get_service_field "${service_id}" "build.dockerfile" 2>/dev/null || true)" \
+    --arg image "$(project_get_service_field "${service_id}" "build.image" 2>/dev/null || true)" \
+    --arg deploy_context "$(project_get_service_field "${service_id}" "deploy.context" 2>/dev/null || true)" \
+    --arg deploy_dockerfile "$(project_get_service_field "${service_id}" "deploy.dockerfile" 2>/dev/null || true)" \
+    --arg deploy_image "$(project_get_service_field "${service_id}" "deploy.image" 2>/dev/null || true)" \
     '{
       context: $context,
       dockerfile: $dockerfile,
@@ -139,14 +139,14 @@ container_service_json_from_manifest() {
     } + (if ($deploy_context != "" or $deploy_dockerfile != "" or $deploy_image != "") then
       {deploy: {context: $deploy_context, dockerfile: $deploy_dockerfile, image: $deploy_image}}
     else {} end)')"
-  runner_json="$(jq -n --arg kind "$(manifest_get_service_field "${service_id}" "runner.kind" 2>/dev/null || true)" '{kind: $kind}')"
-  setup_json="$(jq -n --arg port "$(manifest_get_service_field "${service_id}" "setup.port" 2>/dev/null || true)" '{port: ($port | tonumber? // 0)}')"
+  runner_json="$(jq -n --arg kind "$(project_get_service_field "${service_id}" "runner.kind" 2>/dev/null || true)" '{kind: $kind}')"
+  setup_json="$(jq -n --arg port "$(project_get_service_field "${service_id}" "setup.port" 2>/dev/null || true)" '{port: ($port | tonumber? // 0)}')"
   jq -n \
     --arg id "${service_id}" \
-    --arg name "$(manifest_get_service_field "${service_id}" name 2>/dev/null || true)" \
-    --arg stack "$(manifest_get_service_field "${service_id}" stack 2>/dev/null || true)" \
-    --arg path "$(manifest_get_service_field "${service_id}" path 2>/dev/null || true)" \
-    --arg role "$(manifest_get_service_field "${service_id}" role 2>/dev/null || true)" \
+    --arg name "$(project_get_service_field "${service_id}" name 2>/dev/null || true)" \
+    --arg stack "$(project_get_service_field "${service_id}" stack 2>/dev/null || true)" \
+    --arg path "$(project_get_service_field "${service_id}" path 2>/dev/null || true)" \
+    --arg role "$(project_get_service_field "${service_id}" role 2>/dev/null || true)" \
     --argjson compose_files "${compose_files_json}" \
     --argjson build "${build_json}" \
     --argjson runner "${runner_json}" \
@@ -197,7 +197,7 @@ container_service_id_exists() {
   [[ -n "${service_filter}" ]] || return 1
   while IFS= read -r service_id; do
     [[ "${service_id}" == "${service_filter}" ]] && return 0
-  done < <(manifest_list_services)
+  done < <(project_list_services)
   return 1
 }
 
@@ -342,7 +342,7 @@ container_build_plan_json() {
         no_cache: $no_cache,
         strategy: (if ($compose_files | length) > 0 then "compose" else "dockerfile" end)
       }]' <<< "${plan}")"
-  done < <(manifest_list_services)
+  done < <(project_list_services)
   printf '%s' "${plan}"
 }
 

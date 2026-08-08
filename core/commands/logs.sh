@@ -45,14 +45,14 @@ if [[ -z "${TARGET}" ]]; then
   exit 2
 fi
 
-require_manifest_or_config
+project_require_config_or_yaml
 
 EXEC_LIST=()
 
 if [[ "${TARGET}" == "--all" ]]; then
-  mapfile -t EXEC_LIST < <(manifest_list_services | sort 2>/dev/null || true)
+  mapfile -t EXEC_LIST < <(project_list_services | sort 2>/dev/null || true)
 else
-  if ! printf ' %s ' "$(manifest_list_services | tr '\n' ' ')" | grep -qF " ${TARGET} "; then
+  if ! printf ' %s ' "$(project_list_services | tr '\n' ' ')" | grep -qF " ${TARGET} "; then
     ops_error "Unknown service: '${TARGET}'"
     exit 2
   fi
@@ -78,11 +78,11 @@ trap '_cleanup_logs' EXIT INT TERM
 ops_section "ops experimental logs"
 
 for SVC in "${EXEC_LIST[@]+"${EXEC_LIST[@]}"}"; do
-  STACK="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC}\") | .stack")"
-  RUNNER_KIND="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC}\") | .runner.kind")"
+  STACK="$(project_get_service_field "${SVC}" stack)"
+  RUNNER_KIND="$(project_get_service_field "${SVC}" runner.kind)"
 
   if [[ "${RUNNER_KIND}" == "compose" || "${STACK}" == "docker" ]]; then
-    SVC_PATH="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC}\") | .path")"
+    SVC_PATH="$(project_get_service_field "${SVC}" path)"
     ABS_PATH="${OPS_PROJECT_ROOT}/${SVC_PATH}"
     
     if [[ "${FOLLOW}" == "true" ]]; then
@@ -99,7 +99,7 @@ for SVC in "${EXEC_LIST[@]+"${EXEC_LIST[@]}"}"; do
       CHILD_PIDS+=($!)
     fi
   else
-    RUNNER_KIND="$(_manifest_yq_or_empty ".services[] | select(.id == \"${SVC}\") | .runner.kind")"
+    RUNNER_KIND="$(project_get_service_field "${SVC}" runner.kind)"
     LOG_FILE="${OPS_PROJECT_LOG_DIR}/${SVC}.log"
     LOG_DIR="${OPS_PROJECT_LOG_DIR}/${SVC}"
     if [[ "${RUNNER_KIND}" == "process_group" && -d "${LOG_DIR}" ]]; then

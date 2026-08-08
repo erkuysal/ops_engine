@@ -90,6 +90,20 @@ runtime dependence, then clean setup/write paths, then update docs and messages.
 - [x] Add contributor note: new runtime code must not call `require_manifest`
   unless the command is explicitly YAML import/export.
 
+## Slice 8: Neutral runtime vocabulary
+
+- [x] Make `project_*` accessors the primary implementations and retain
+  `manifest_*` names only as compatibility wrappers.
+- [x] Migrate runtime commands, status, graph, environment, runner, and
+  container pipeline code to `project_*` accessors.
+- [x] Remove direct YAML reads from run-plan and Go stack helpers through a
+  structured `project_get_service_json_field` accessor.
+- [x] Keep direct `yq` use only where YAML itself is the explicit input/output,
+  including validation, drift reporting, import/export, setup migration, and
+  Docker Compose inspection.
+- [x] Add a smoke boundary that rejects legacy accessor calls in migrated
+  runtime files.
+
 ## Candidate verification commands
 
 ```bash

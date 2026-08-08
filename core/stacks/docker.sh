@@ -15,7 +15,7 @@ _docker_collect_compose_files() {
   local files=() file
   while IFS= read -r file; do
     [[ -n "${file}" && "${file}" != "null" ]] && files+=("${file}")
-  done < <(manifest_get_service_list_field "${OPS_SERVICE_ID}" compose_files 2>/dev/null || true)
+  done < <(project_get_service_list_field "${OPS_SERVICE_ID}" compose_files 2>/dev/null || true)
 
   if [[ ${#files[@]} -eq 0 ]]; then
     local fallback

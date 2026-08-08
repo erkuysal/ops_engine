@@ -35,7 +35,7 @@ status_read_pid_file() {
 
 status_is_process_group() {
   local svc_id="${1:?status_is_process_group: service id required}"
-  [[ "$(manifest_get_service_field "${svc_id}" "runner.kind")" == "process_group" ]]
+  [[ "$(project_get_service_field "${svc_id}" "runner.kind")" == "process_group" ]]
 }
 
 status_service_port() {
@@ -54,12 +54,12 @@ status_service_port() {
 
 status_service_healthcheck() {
   local svc_id="$1"
-  manifest_get_service_field "${svc_id}" healthcheck
+  project_get_service_field "${svc_id}" healthcheck
 }
 
 status_service_compose_files() {
   local svc_id="$1"
-  manifest_get_service_list_field "${svc_id}" compose_files
+  project_get_service_list_field "${svc_id}" compose_files
 }
 
 status_docker_running() {
@@ -97,9 +97,9 @@ status_collect_process_rows() {
   local svc_id="${1:?status_collect_process_rows: service id required}"
   local stack path run_dir pid_file rel pid name runner_kind
 
-  stack="$(manifest_get_service_field "${svc_id}" stack)"
-  path="$(manifest_get_service_field "${svc_id}" path)"
-  runner_kind="$(manifest_get_service_field "${svc_id}" runner.kind 2>/dev/null || true)"
+  stack="$(project_get_service_field "${svc_id}" stack)"
+  path="$(project_get_service_field "${svc_id}" path)"
+  runner_kind="$(project_get_service_field "${svc_id}" runner.kind 2>/dev/null || true)"
 
   if [[ "${runner_kind}" == "compose" || "${stack}" == "docker" ]]; then
     if status_docker_running "${svc_id}" "${path}"; then
@@ -123,14 +123,14 @@ status_collect_process_rows() {
         [[ -f "${pid_file}" ]] && rm -f "${pid_file}" 2>/dev/null || true
         printf '%s%s%s%s%s\n' "${name}" "${_STATUS_FS}" "" "${_STATUS_FS}" "${rel}"
       fi
-    done < <(manifest_get_service_list_field "${svc_id}" "run.processes.name")
+    done < <(project_get_service_list_field "${svc_id}" "run.processes.name")
 
     if [[ -d "${run_dir}" ]]; then
       local stale
       for stale in "${run_dir}"/*.pid; do
         [[ -f "${stale}" ]] || continue
         name="$(basename "${stale}" .pid)"
-        if ! manifest_get_service_list_field "${svc_id}" "run.processes.name" | grep -qxF "${name}"; then
+        if ! project_get_service_list_field "${svc_id}" "run.processes.name" | grep -qxF "${name}"; then
           rel="${stale#${OPS_PROJECT_ROOT}/}"
           if pid="$(status_read_pid_file "${stale}" 2>/dev/null)"; then
             printf '%s%s%s%s%s\n' "${name}" "${_STATUS_FS}" "${pid}" "${_STATUS_FS}" "${rel}"
@@ -163,9 +163,9 @@ _status_parse_row() {
 status_aggregate_state() {
   local svc_id="$1"
   local stack path runner_kind
-  stack="$(manifest_get_service_field "${svc_id}" stack)"
-  path="$(manifest_get_service_field "${svc_id}" path)"
-  runner_kind="$(manifest_get_service_field "${svc_id}" runner.kind 2>/dev/null || true)"
+  stack="$(project_get_service_field "${svc_id}" stack)"
+  path="$(project_get_service_field "${svc_id}" path)"
+  runner_kind="$(project_get_service_field "${svc_id}" runner.kind 2>/dev/null || true)"
 
   if [[ "${runner_kind}" == "compose" || "${stack}" == "docker" ]]; then
     if status_docker_running "${svc_id}" "${path}"; then
@@ -226,9 +226,9 @@ status_service_json() {
   require_bins jq
 
   local name stack path state port health pids config_source
-  name="$(manifest_get_service_field "${svc_id}" name)"
-  stack="$(manifest_get_service_field "${svc_id}" stack)"
-  path="$(manifest_get_service_field "${svc_id}" path)"
+  name="$(project_get_service_field "${svc_id}" name)"
+  stack="$(project_get_service_field "${svc_id}" stack)"
+  path="$(project_get_service_field "${svc_id}" path)"
   state="$(status_aggregate_state "${svc_id}")"
   port="$(status_service_port "${svc_id}")"
   health="$(status_service_healthcheck "${svc_id}")"
@@ -286,7 +286,7 @@ status_service_json() {
 
 status_all_json() {
   local ids=() id services_json='[]'
-  mapfile -t ids < <(manifest_list_services)
+  mapfile -t ids < <(project_list_services)
 
   for id in "${ids[@]+"${ids[@]}"}"; do
     [[ -z "${id}" ]] && continue

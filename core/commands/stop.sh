@@ -50,7 +50,7 @@ if [[ -z "${TARGET}" ]]; then
   exit 2
 fi
 
-require_manifest_or_config
+project_require_config_or_yaml
 graph_cycle_check
 
 EXEC_LIST=()
@@ -58,7 +58,7 @@ EXEC_LIST=()
 if [[ "${TARGET}" == "--all" ]]; then
   read -ra EXEC_LIST <<< "$(graph_reverse_topo_sort "--all")"
 else
-  if ! printf ' %s ' "$(manifest_list_services | tr '\n' ' ')" | grep -qF " ${TARGET} "; then
+  if ! printf ' %s ' "$(project_list_services | tr '\n' ' ')" | grep -qF " ${TARGET} "; then
     ops_error "Unknown service: '${TARGET}'"
     exit 2
   fi

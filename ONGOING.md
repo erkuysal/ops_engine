@@ -144,7 +144,8 @@ The immediate goals are:
 - `ops setup export-yaml --apply` writes `.ops.yaml` from `.ops.project/config`
 - `ops setup import-yaml --apply` materializes config from `.ops.yaml`
 - `ops validate` validates JSON config directly when no `.ops.yaml` exists
-- Runtime commands accept config-only projects via `require_manifest_or_config`
+- Runtime commands use the neutral `project_*` API and accept config-only
+  projects; legacy `manifest_*` names are compatibility wrappers
 - `confirmed` decisions are tracked in `decisions.json` and respected on re-setup; apply marks decisions confirmed when interactive or `--confirm-inferred`
 
 **Still open:**

@@ -81,7 +81,7 @@ case "${SUBCMD}" in
     ;;
 esac
 
-require_manifest_or_config
+project_require_config_or_yaml
 
 # ── show ──────────────────────────────────────────────────────────────────────
 if [[ "${SUBCMD}" == "show" ]]; then
@@ -102,7 +102,7 @@ if [[ "${SUBCMD}" == "show" ]]; then
 
   if [[ "${show_all}" == "true" ]]; then
     ops_section "ops experimental env show --all"
-    mapfile -t _ALL_SVCS < <(manifest_list_services)
+    mapfile -t _ALL_SVCS < <(project_list_services)
     for svc in "${_ALL_SVCS[@]+"${_ALL_SVCS[@]}"}"; do
       printf '\n'
       if [[ "${OPS_PLAIN}" == "true" ]]; then
@@ -116,7 +116,7 @@ if [[ "${SUBCMD}" == "show" ]]; then
     printf '\n'
   elif [[ -n "${service_id}" ]]; then
     ops_section "ops experimental env show: ${service_id}"
-    manifest_service_exists "${service_id}" || \
+    project_service_exists "${service_id}" || \
       die "Unknown service id: '${service_id}'. Run 'ops experimental validate' to see declared services."
     printf '\n'
     # shellcheck disable=SC2086
@@ -135,7 +135,7 @@ elif [[ "${SUBCMD}" == "doctor" ]]; then
     exit 1
   }
 
-  manifest_service_exists "${service_id}" || \
+  project_service_exists "${service_id}" || \
     die "Unknown service id: '${service_id}'. Run 'ops experimental validate' to see declared services."
 
   ops_section "ops experimental env doctor: ${service_id}"

@@ -11,7 +11,7 @@ _OPS_CORE_GRAPH_LOADED=1
 # Exits with code 4 if a cycle is found.
 graph_cycle_check() {
   local all_ids=()
-  mapfile -t all_ids < <(manifest_list_services | sort 2>/dev/null || true)
+  mapfile -t all_ids < <(project_list_services | sort 2>/dev/null || true)
   
   # state: 0=unvisited, 1=visiting, 2=visited
   local -A state=()
@@ -25,7 +25,7 @@ graph_cycle_check() {
     cycle_path+=("$node")
     
     local deps=()
-    mapfile -t deps < <(manifest_get_service_list_field "$node" depends_on 2>/dev/null || true)
+    mapfile -t deps < <(project_get_service_list_field "$node" depends_on 2>/dev/null || true)
     
     local dep
     for dep in "${deps[@]+"${deps[@]}"}"; do
@@ -69,7 +69,7 @@ graph_topo_sort() {
 
   local nodes_to_visit=()
   if [[ "$target" == "--all" ]]; then
-    mapfile -t nodes_to_visit < <(manifest_list_services | sort 2>/dev/null || true)
+    mapfile -t nodes_to_visit < <(project_list_services | sort 2>/dev/null || true)
   else
     nodes_to_visit=("$target")
   fi
@@ -81,7 +81,7 @@ graph_topo_sort() {
     
     local deps=()
     # Sort alphabetically to guarantee deterministic resolution
-    mapfile -t deps < <(manifest_get_service_list_field "$node" depends_on 2>/dev/null | sort || true)
+    mapfile -t deps < <(project_get_service_list_field "$node" depends_on 2>/dev/null | sort || true)
     
     local dep
     for dep in "${deps[@]+"${deps[@]}"}"; do
