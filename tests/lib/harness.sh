@@ -85,6 +85,23 @@ ops_source_lib() {
   source "${OPS_CORE_ROOT}/lib/${lib}"
 }
 
+# core/lib/init.sh resolves several OPS_PROJECT_* paths with "${VAR:-default}",
+# i.e. only when unset, then exports them (see _ops_bootstrap_root). A suite
+# that calls ops_source_lib (which sources init.sh directly into the caller's
+# shell, not a subshell) leaves those exports behind for every suite that
+# runs afterward in the same `tests/run.sh` process. A later suite that
+# re-sources init.sh for a different fixture root then silently inherits the
+# earlier suite's resolved paths instead of computing its own. Call this
+# between suites (or at the start of a suite known to be sensitive to it) to
+# force a clean re-resolution.
+harness_reset_project_env() {
+  unset OPS_PROJECT_STATE_DIR OPS_PROJECT_LOG_DIR OPS_PROJECT_RUN_DIR OPS_PROJECT_GENERATED_DIR
+  unset OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
+  unset OPS_PROJECT_CONFIG_SETTINGS_FILE OPS_PROJECT_CONFIG_PROFILES_FILE OPS_PROJECT_HISTORY_DIR
+  unset OPS_PROJECT_SETUP_GENERATED_FILE OPS_PROJECT_SETUP_GENERATED_LEGACY_FILE OPS_PROFILES_DIR
+  unset OPS_PROJECT_BIN
+}
+
 fixture_path() {
   printf '%s/fixtures/%s' "${OPS_TESTS_DIR}" "$1"
 }

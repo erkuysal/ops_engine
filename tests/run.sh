@@ -75,6 +75,11 @@ suite_monitor
 suite_env_discovery
 suite_setup_check
 suite_healthcheck
+# suite_healthcheck sources core/lib/init.sh directly (via ops_source_lib)
+# instead of in a subshell, which exports resolved OPS_PROJECT_* paths for
+# its own fixture into this shell. Reset them so later suites resolve their
+# own fixture roots instead of silently inheriting this one.
+harness_reset_project_env
 suite_docker_compose
 suite_runner_profiles
 suite_command_exec

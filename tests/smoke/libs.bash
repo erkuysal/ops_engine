@@ -71,6 +71,7 @@ suite_libs() {
     OPS_PROJECT_ROOT="${root}" OPS_CORE_ROOT="${OPS_CORE_ROOT}" OPS_PLAIN=true CI=true bash -c '
       set -euo pipefail
       unset OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
+      unset OPS_PROJECT_CONFIG_SETTINGS_FILE OPS_PROJECT_CONFIG_PROFILES_FILE OPS_PROJECT_STATE_DIR
       source "${OPS_CORE_ROOT}/lib/init.sh"
       source "${OPS_CORE_ROOT}/lib/manifest.sh"
       project_get_service_json_field backend build.outputs "[]" |
@@ -99,6 +100,7 @@ YAML
     OPS_PROJECT_ROOT="${root}" OPS_CORE_ROOT="${OPS_CORE_ROOT}" OPS_PLAIN=true CI=true bash -c '
       set -euo pipefail
       unset OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
+      unset OPS_PROJECT_CONFIG_SETTINGS_FILE OPS_PROJECT_CONFIG_PROFILES_FILE OPS_PROJECT_STATE_DIR
       source "${OPS_CORE_ROOT}/lib/init.sh"
       source "${OPS_CORE_ROOT}/lib/manifest.sh"
       project_get_service_json_field backend build.outputs "[]" |
