@@ -10,6 +10,7 @@ set -euo pipefail
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
+source "${_SELF_DIR}/../lib/output.sh"
 source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
 source "${_SELF_DIR}/../lib/status.sh"
@@ -71,9 +72,9 @@ fi
 if [[ "${JSON}" == "true" ]]; then
   require_bins jq
   if [[ -n "${TARGET}" ]]; then
-    status_service_json "${TARGET}"
+    status_service_json "${TARGET}" | ops_json_envelope "status"
   else
-    status_all_json
+    status_all_json | ops_json_envelope "status"
   fi
   exit 0
 fi

@@ -6,6 +6,7 @@ set -euo pipefail
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
+source "${_SELF_DIR}/../lib/output.sh"
 source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
 source "${_SELF_DIR}/../lib/interactive.sh"
@@ -381,7 +382,7 @@ _run_credentials() {
   local report missing
   report="$(_credential_status_json)"
   if [[ "${JSON}" == "true" ]]; then
-    jq '.' <<< "${report}"
+    jq '.' <<< "${report}" | ops_json_envelope "monitor credentials"
     return 0
   fi
 
@@ -612,7 +613,9 @@ _run_setup() {
     fi
   fi
 
-  if [[ "${JSON}" == "true" || "${APPLY}" != "true" ]]; then
+  if [[ "${JSON}" == "true" ]]; then
+    jq '.' <<< "${config_json}" | ops_json_envelope "monitor setup"
+  elif [[ "${APPLY}" != "true" ]]; then
     jq '.' <<< "${config_json}"
   fi
 }
@@ -687,7 +690,7 @@ _run_hosts() {
   done < <(jq -c '.[]' <<< "${candidates}")
 
   if [[ "${JSON}" == "true" ]]; then
-    jq -n --argjson candidates "${results}" '{candidates: $candidates}'
+    jq -n --argjson candidates "${results}" '{candidates: $candidates}' | ops_json_envelope "monitor hosts"
     return 0
   fi
 
@@ -823,7 +826,7 @@ _run_postgres_info() {
   local report state detail
   report="$(_postgres_info_json)"
   if [[ "${JSON}" == "true" ]]; then
-    jq '.' <<< "${report}"
+    jq '.' <<< "${report}" | ops_json_envelope "monitor postgres info"
     return 0
   fi
 
@@ -844,7 +847,7 @@ _run_postgres_databases() {
   local rows
   rows="$(_postgres_psql_json "select coalesce(json_agg(json_build_object('name', datname, 'owner', pg_get_userbyid(datdba), 'encoding', pg_encoding_to_char(encoding), 'allow_connections', datallowconn) order by datname), '[]'::json) from pg_database;")"
   if [[ "${JSON}" == "true" ]]; then
-    jq -n --argjson databases "${rows}" '{databases: $databases}'
+    jq -n --argjson databases "${rows}" '{databases: $databases}' | ops_json_envelope "monitor postgres databases"
     return 0
   fi
   ops_section "ops monitor postgres databases"
@@ -859,7 +862,7 @@ _run_postgres_users() {
   local rows
   rows="$(_postgres_psql_json "select coalesce(json_agg(json_build_object('name', rolname, 'can_login', rolcanlogin, 'superuser', rolsuper, 'create_db', rolcreatedb, 'create_role', rolcreaterole) order by rolname), '[]'::json) from pg_roles;")"
   if [[ "${JSON}" == "true" ]]; then
-    jq -n --argjson users "${rows}" '{users: $users}'
+    jq -n --argjson users "${rows}" '{users: $users}' | ops_json_envelope "monitor postgres users"
     return 0
   fi
   ops_section "ops monitor postgres users"
@@ -987,7 +990,7 @@ _run_status() {
           ok: ($down == 0 and ((if $strict then $unknown else 0 end) == 0))
         },
         targets: $targets
-      }'
+      }' | ops_json_envelope "monitor ${SUBCMD}"
     if [[ "${SUBCMD}" == "test" ]]; then
       if [[ "${down_count}" != "0" || ( "${STRICT}" == "true" && "${unknown_count}" != "0" ) ]]; then
         return 1

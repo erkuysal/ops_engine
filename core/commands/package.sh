@@ -6,6 +6,7 @@ set -euo pipefail
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
+source "${_SELF_DIR}/../lib/output.sh"
 
 SUBCMD="${1:-status}"
 [[ $# -gt 0 ]] && shift || true
@@ -167,7 +168,7 @@ if [[ "${JSON}" == "true" ]]; then
         installed_at: $installed_at,
         updated_at: $updated_at
       }
-    }'
+    }' | ops_json_envelope "package"
   exit 0
 fi
 

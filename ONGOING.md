@@ -192,6 +192,23 @@ The immediate goals are:
 - Legacy deploy bridge remains for ship/build/deploy actions
 - Prefer native stacks and `.ops.project` config for dev workflows
 
+### 5. JSON output standardization (in progress)
+
+**Done recently:**
+
+- Shared `ok`/`command` envelope (`core/lib/output.sh`,
+  `schemas/command-result.schema.json`) merged onto every existing `--json`
+  command: `build`, `deploy`, `describe`, `global`, `monitor`, `package`,
+  `setup` (`check`, `run-plans`), `setup shipping`, `ship`, `status`
+- Added `--json` to `doctor`, `show`, `validate` (all previously text-only)
+- Documented in `docs/reference/json-output.md`
+
+**Still open:**
+
+- Tracked in `ISSUES/3_JSON_OUTPUT_STANDARDIZATION.md`: `--json` for `env`,
+  `backup`/`rollback`, `ci`, `cleanup`, `init`, `install`, `logs`, `run`,
+  `stop`, `update`, `bootstrap`
+
 ## Recently Completed (implementation slices)
 
 - **Tests + CI:** `tests/run.sh`, stack fixtures under `tests/fixtures/`, smoke suites, GitHub Actions workflow (`.github/workflows/ci.yml`).

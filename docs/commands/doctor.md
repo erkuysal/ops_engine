@@ -8,10 +8,16 @@ Read-only health check of orchestrator prerequisites and project ops layout.
 
 ```bash
 ops doctor
+ops doctor --json
 ops doctor boundaries
 ```
 
 Related: `ops install doctor`, `ops setup doctor`, `ops ci doctor`.
+
+`--json` prints `{summary: {passed, warnings, failed}, checks: [{status, message}, ...]}`
+merged with the shared `ok`/`command` envelope — see
+[../reference/json-output.md](../reference/json-output.md). Not supported
+for `ops doctor boundaries`.
 
 ## Source files
 

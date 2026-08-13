@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ops command JSON result envelope",
+  "description": "Minimum shape every 'ops <command> --json' output conforms to. Command-specific fields sit alongside ok/command at the top level (additive, not nested under a data key), so existing consumers reading a known field keep working.",
+  "type": "object",
+  "required": ["ok", "command"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "command": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": true
+}

@@ -108,6 +108,7 @@ Contributor and implementation docs for the `.ops` package. For day-to-day usage
 | --- | --- |
 | [reference/action-resolution.md](reference/action-resolution.md) | How `ops run` picks a runner |
 | [reference/config-files.md](reference/config-files.md) | `.ops.project` layout |
+| [reference/json-output.md](reference/json-output.md) | The shared `--json` envelope and which commands support it |
 | [reference/legacy.md](reference/legacy.md) | Legacy bridge and `./ops.sh legacy` |
 
 ## Process and vision (outside `docs/`)

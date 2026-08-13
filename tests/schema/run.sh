@@ -61,6 +61,16 @@ validate_ok "${OPS_REPO_ROOT}/schemas/shipping.schema.json" \
 validate_ok "${OPS_REPO_ROOT}/schemas/capabilities.schema.json" \
   "${OPS_REPO_ROOT}/core/capabilities.json"
 
+printf '  runtime  describe --json <- schemas/command-result.schema.json\n'
+DESCRIBE_JSON="$(mktemp --suffix=.json)"
+trap 'rm -f "${DESCRIBE_JSON}"' EXIT
+OPS_PROJECT_ROOT="${OPS_REPO_ROOT}/tests/fixtures/config-only" \
+OPS_CORE_ROOT="${OPS_REPO_ROOT}/core" \
+OPS_PLAIN=true CI=true OPS_NON_INTERACTIVE=true \
+  bash "${OPS_REPO_ROOT}/core/main.sh" describe --json > "${DESCRIBE_JSON}"
+ajv validate --spec=draft2020 --strict=false \
+  -s "${OPS_REPO_ROOT}/schemas/command-result.schema.json" -d "${DESCRIBE_JSON}" >/dev/null
+
 for fixture in config-only configured-command container-pipeline; do
   config_dir="${OPS_REPO_ROOT}/tests/fixtures/${fixture}/.ops.project/config"
   validate_ok "${OPS_REPO_ROOT}/schemas/project-config.schema.json" "${config_dir}/project.json"

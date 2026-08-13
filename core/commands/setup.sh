@@ -6,6 +6,7 @@ set -euo pipefail
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
+source "${_SELF_DIR}/../lib/output.sh"
 source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/settings.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
@@ -2110,7 +2111,7 @@ _run_setup_check() {
   report_json="$(setup_check_build_report_json "${discovery_json}" "${proposed_setup_json}" "${current_json}" "${cached_json}")"
 
   if [[ "${JSON_OUTPUT}" == "true" ]]; then
-    jq '.' <<< "${report_json}"
+    jq '.' <<< "${report_json}" | ops_json_envelope "setup"
     setup_check_has_drift "${report_json}" && exit_code=1
     exit "${exit_code}"
   fi
@@ -2158,7 +2159,7 @@ _run_run_plans() {
   done < <(manifest_list_services)
 
   if [[ "${JSON_OUTPUT}" == "true" ]]; then
-    jq '{run_plans: .}' <<< "${report_json}"
+    jq '{run_plans: .}' <<< "${report_json}" | ops_json_envelope "setup"
     return 0
   fi
 

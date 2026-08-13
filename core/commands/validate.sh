@@ -20,6 +20,8 @@ _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 # shellcheck source=../lib/logger.sh
 source "${_SELF_DIR}/../lib/logger.sh"
+# shellcheck source=../lib/output.sh
+source "${_SELF_DIR}/../lib/output.sh"
 # shellcheck source=../lib/manifest.sh
 source "${_SELF_DIR}/../lib/manifest.sh"
 # shellcheck source=../lib/settings.sh
@@ -32,11 +34,13 @@ source "${_SELF_DIR}/../lib/graph.sh"
 source "${_SELF_DIR}/../lib/config_validate.sh"
 
 # ── Argument parsing ─────────────────────────────────────────────────────────
+JSON=false
 for _arg in "$@"; do
   case "${_arg}" in
     --plain)   OPS_PLAIN=true ;;
+    --json)    JSON=true ;;
     --help|-h)
-      printf 'Usage: ./ops.sh experimental validate [--plain]\n'
+      printf 'Usage: ./ops.sh experimental validate [--plain] [--json]\n'
       printf 'Validates .ops.project/config, falling back to .ops.yaml only when config is absent.\n'
       printf 'Exit 0 = passed (warnings OK), exit 1 = errors found.\n'
       exit 0
@@ -367,6 +371,14 @@ _pass5_overrides() {
 }
 
 # ── Run all passes ────────────────────────────────────────────────────────────
+# The passes below print progress (ops_section/ops_info/ops_step) unconditionally;
+# in --json mode that's noise ahead of the JSON payload, so silence stdout for
+# this phase and restore it before printing diagnostics/JSON below. Diagnostics
+# themselves are collected into _ERRORS/_WARNINGS/_HINTS, not printed here.
+if [[ "${JSON}" == "true" ]]; then
+  exec 3>&1 1>/dev/null
+fi
+
 ops_section "ops validate"
 if [[ "${VALIDATE_CONFIG_ONLY}" == "true" ]]; then
   ops_info "Source: .ops.project/config"
@@ -384,34 +396,55 @@ else
   _pass5_overrides
 fi
 
-# ── Print diagnostics ─────────────────────────────────────────────────────────
-printf '\n'
-
-if [[ ${#_ERRORS[@]} -gt 0 ]]; then
-  _print_diag "ERROR" "${OPS_RED}"   "${_ERRORS[@]+"${_ERRORS[@]}"}"
-fi
-if [[ ${#_WARNINGS[@]} -gt 0 ]]; then
-  _print_diag "WARN " "${OPS_YELLOW}" "${_WARNINGS[@]+"${_WARNINGS[@]}"}"
-fi
-if [[ ${#_HINTS[@]} -gt 0 ]]; then
-  _print_diag "HINT " "${OPS_DIM}"   "${_HINTS[@]+"${_HINTS[@]}"}"
+if [[ "${JSON}" == "true" ]]; then
+  exec 1>&3 3>&-
 fi
 
-# ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n'
 _n_err="${#_ERRORS[@]}"
 _n_warn="${#_WARNINGS[@]}"
 _n_hint="${#_HINTS[@]}"
 
-if [[ "${OPS_PLAIN}" == "true" ]]; then
-  printf 'Validation: %d errors  %d warnings  %d hints\n' \
-    "${_n_err}" "${_n_warn}" "${_n_hint}"
+if [[ "${JSON}" == "true" ]]; then
+  require_bins jq
+  _lines_to_json() {
+    [[ $# -eq 0 ]] && { printf '[]'; return 0; }
+    printf '%s\n' "$@" | jq -R -s -c 'split("\n") | map(select(length > 0))'
+  }
+  jq -n \
+    --argjson errors "$(_lines_to_json "${_ERRORS[@]+"${_ERRORS[@]}"}")" \
+    --argjson warnings "$(_lines_to_json "${_WARNINGS[@]+"${_WARNINGS[@]}"}")" \
+    --argjson hints "$(_lines_to_json "${_HINTS[@]+"${_HINTS[@]}"}")" \
+    --argjson n_err "${_n_err}" --argjson n_warn "${_n_warn}" --argjson n_hint "${_n_hint}" \
+    '{
+      summary: {errors: $n_err, warnings: $n_warn, hints: $n_hint},
+      errors: $errors, warnings: $warnings, hints: $hints
+    }' | ops_json_envelope "validate" "$(if (( _n_err == 0 )); then echo true; else echo false; fi)"
 else
-  printf '%s' "${OPS_BOLD}"
-  printf 'Validation: %s%d errors%s  %s%d warnings%s  %s%d hints%s\n' \
-    "${OPS_RED}"    "${_n_err}"  "${OPS_NC}${OPS_BOLD}" \
-    "${OPS_YELLOW}" "${_n_warn}" "${OPS_NC}${OPS_BOLD}" \
-    "${OPS_DIM}"    "${_n_hint}" "${OPS_NC}"
+  # ── Print diagnostics ───────────────────────────────────────────────────────
+  printf '\n'
+
+  if [[ ${#_ERRORS[@]} -gt 0 ]]; then
+    _print_diag "ERROR" "${OPS_RED}"   "${_ERRORS[@]+"${_ERRORS[@]}"}"
+  fi
+  if [[ ${#_WARNINGS[@]} -gt 0 ]]; then
+    _print_diag "WARN " "${OPS_YELLOW}" "${_WARNINGS[@]+"${_WARNINGS[@]}"}"
+  fi
+  if [[ ${#_HINTS[@]} -gt 0 ]]; then
+    _print_diag "HINT " "${OPS_DIM}"   "${_HINTS[@]+"${_HINTS[@]}"}"
+  fi
+
+  # ── Summary ─────────────────────────────────────────────────────────────────
+  printf '\n'
+  if [[ "${OPS_PLAIN}" == "true" ]]; then
+    printf 'Validation: %d errors  %d warnings  %d hints\n' \
+      "${_n_err}" "${_n_warn}" "${_n_hint}"
+  else
+    printf '%s' "${OPS_BOLD}"
+    printf 'Validation: %s%d errors%s  %s%d warnings%s  %s%d hints%s\n' \
+      "${OPS_RED}"    "${_n_err}"  "${OPS_NC}${OPS_BOLD}" \
+      "${OPS_YELLOW}" "${_n_warn}" "${OPS_NC}${OPS_BOLD}" \
+      "${OPS_DIM}"    "${_n_hint}" "${OPS_NC}"
+  fi
 fi
 
 if (( _n_err > 0 )); then

@@ -9,11 +9,18 @@ projects that have not materialized config yet.
 ## CLI / entrypoints
 
 ```bash
-ops validate [--plain]
+ops validate [--plain] [--json]
 ```
 
 When config exists, validation reads `.ops.project/config` through
 `core/lib/config_validate.sh`. It does not generate a temporary YAML manifest.
+
+`--json` prints `{summary: {errors, warnings, hints}, errors: [...], warnings: [...], hints: [...]}`
+merged with the shared `ok`/`command` envelope — see
+[../reference/json-output.md](../reference/json-output.md). Unlike other
+commands, `ok` here reflects whether validation actually passed
+(`errors == 0`), matching the exit code — not just whether JSON was produced.
+Exit codes are unchanged in `--json` mode (see below).
 
 ## Source files
 

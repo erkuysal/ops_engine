@@ -7,6 +7,7 @@ _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 unset OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
+source "${_SELF_DIR}/../lib/output.sh"
 unset OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
 source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/container_pipeline.sh"
@@ -156,7 +157,8 @@ if [[ "${JSON}" == "true" ]]; then
     --argjson no_start "${NO_START}" \
     --argjson ssh_args "${SSH_ARGS_JSON}" \
     --argjson targets "${PLAN}" \
-    '{tag: $tag, remote: $remote, deploy_path: $path, stages: {pull: ($no_pull | not), build: $build, start: ($no_start | not)}, pull_only: $pull_only, no_pull: $no_pull, build: $build, no_start: $no_start, ssh_args: $ssh_args, targets: $targets}'
+    '{tag: $tag, remote: $remote, deploy_path: $path, stages: {pull: ($no_pull | not), build: $build, start: ($no_start | not)}, pull_only: $pull_only, no_pull: $no_pull, build: $build, no_start: $no_start, ssh_args: $ssh_args, targets: $targets}' \
+    | ops_json_envelope "deploy"
   exit 0
 fi
 

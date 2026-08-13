@@ -7,6 +7,7 @@ _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 unset OPS_PROJECT_CONFIG_DIR OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
+source "${_SELF_DIR}/../lib/output.sh"
 unset OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
 source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/container_pipeline.sh"
@@ -94,7 +95,7 @@ fi
 
 if [[ "${JSON}" == "true" ]]; then
   jq -n --arg tag "${TAG}" --argjson push "${PUSH}" --argjson targets "${PLAN}" \
-    '{tag: $tag, push: $push, targets: $targets}'
+    '{tag: $tag, push: $push, targets: $targets}' | ops_json_envelope "build"
   exit 0
 fi
 

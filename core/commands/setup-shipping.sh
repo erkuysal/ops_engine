@@ -6,6 +6,7 @@ set -euo pipefail
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
+source "${_SELF_DIR}/../lib/output.sh"
 source "${_SELF_DIR}/../lib/shipping.sh"
 
 APPLY=false
@@ -306,7 +307,7 @@ printf '%s\n' "${proposal}" > "${tmp_file}"
 shipping_validate_config "${tmp_file}"
 
 if [[ "${JSON}" == "true" ]]; then
-  jq . "${tmp_file}"
+  jq . "${tmp_file}" | ops_json_envelope "setup shipping"
 elif [[ "${APPLY}" != "true" ]]; then
   ops_section "ops setup shipping"
   printf 'Proposal source: %s\n' "${source_label}"

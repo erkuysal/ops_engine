@@ -20,4 +20,9 @@ suite_doctor() {
     *"ops experimental init"*|*".ops.yaml not yet created"*) assert_eq "doctor avoids legacy yaml init warning" "false" "true" ;;
     *) assert_eq "doctor avoids legacy yaml init warning" "false" "false" ;;
   esac
+
+  local json
+  json="$(ops_run "${root}" doctor --json)"
+  assert_eq "doctor --json emits pure JSON" "true" \
+    "$(printf '%s' "${json}" | jq -e '.ok == true and .command == "doctor" and (.checks | type) == "array" and .summary.failed == 0' >/dev/null 2>&1 && echo true || echo false)"
 }

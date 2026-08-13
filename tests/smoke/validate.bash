@@ -62,4 +62,19 @@ suite_validate() {
   root="$(fixture_copy config-invalid)"
   assert_fail "validate rejects malformed config" 1 \
     ops_run "${root}" validate --plain
+
+  local json
+  root="$(fixture_copy config-only)"
+  json="$(ops_run "${root}" validate --json)"
+  assert_eq "validate --json emits pure JSON on success" "true" \
+    "$(printf '%s' "${json}" | jq -e '.ok == true and .command == "validate" and .summary.errors == 0' >/dev/null 2>&1 && echo true || echo false)"
+
+  root="$(fixture_copy config-invalid)"
+  set +e
+  json="$(ops_run "${root}" validate --json)"
+  local json_exit=$?
+  set -e
+  assert_eq "validate --json still exits 1 on errors" "1" "${json_exit}"
+  assert_eq "validate --json reports ok=false on errors" "true" \
+    "$(printf '%s' "${json}" | jq -e '.ok == false and (.summary.errors // 0) > 0' >/dev/null 2>&1 && echo true || echo false)"
 }

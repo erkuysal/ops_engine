@@ -6,6 +6,7 @@ set -euo pipefail
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
+source "${_SELF_DIR}/../lib/output.sh"
 source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/settings.sh"
 source "${_SELF_DIR}/../lib/setup.sh"
@@ -16,13 +17,14 @@ source "${_SELF_DIR}/../lib/runner.sh"
 
 _usage_show() {
   cat <<'EOF'
-Usage: ops show <action> <service_id> [--ci-mode] [--unmask-env]
+Usage: ops show <action> <service_id> [--ci-mode] [--unmask-env] [--json]
 
 Shows how ops would resolve and run an action without executing it.
 
 Examples:
   ./ops.sh show start backend
   ./ops.sh show test web --ci-mode
+  ./ops.sh show start backend --json
 EOF
 }
 
@@ -30,6 +32,7 @@ ACTION=""
 SVC_ID=""
 CI_FLAG=""
 UNMASK_ENV=false
+JSON=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -43,6 +46,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --unmask-env)
       UNMASK_ENV=true
+      shift
+      ;;
+    --json)
+      JSON=true
       shift
       ;;
     --*)
@@ -74,6 +81,12 @@ fi
 
 RUN_PLAN_JSON="$(run_plan_generate_json "${ACTION}" "${SVC_ID}")"
 RUN_PLAN_FILE="$(run_plan_write_json "${SVC_ID}" "${ACTION}" "${RUN_PLAN_JSON}")"
+
+if [[ "${JSON}" == "true" ]]; then
+  jq --arg run_plan_file "${RUN_PLAN_FILE#${OPS_PROJECT_ROOT}/}" '. + {run_plan_file: $run_plan_file}' \
+    <<< "${RUN_PLAN_JSON}" | ops_json_envelope "show"
+  exit 0
+fi
 
 _run_plan_get() {
   local expr="${1:?_run_plan_get: jq expression required}"

@@ -6,6 +6,7 @@ set -euo pipefail
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
+source "${_SELF_DIR}/../lib/output.sh"
 source "${_SELF_DIR}/../lib/global_profiles.sh"
 
 SUBCMD="${1:-list}"
@@ -114,7 +115,7 @@ _setup_profile() {
         credentials: {source: "docker-credential-store", username_env: "DOCKER_USERNAME", password_env: "DOCKER_PASSWORD"}
       }
     }')"
-  if [[ "${JSON}" == "true" ]]; then printf '%s\n' "${profile_json}"; return 0; fi
+  if [[ "${JSON}" == "true" ]]; then printf '%s\n' "${profile_json}" | ops_json_envelope "global"; return 0; fi
   jq -r '"Profile: " + .id, "SSH: " + (.deploy.user // "") + "@" + (.deploy.host // ""), "Deploy path: " + (.deploy.path_template // ""), "Docker: " + (.docker.registry // "") + "/" + (.docker.namespace // "")' <<< "${profile_json}"
   if [[ "${APPLY}" == "true" ]]; then
     ensure_dir "${OPS_GLOBAL_PROFILES_DIR}"
@@ -137,7 +138,7 @@ _list_profiles() {
     [[ -n "${id}" ]] || continue
     profiles="$(jq -c --arg id "${id}" '. + [$id]' <<< "${profiles}")"
   done < <(global_profile_list)
-  if [[ "${JSON}" == "true" ]]; then printf '%s\n' "${profiles}"; else
+  if [[ "${JSON}" == "true" ]]; then jq -n --argjson profiles "${profiles}" '{profiles: $profiles}' | ops_json_envelope "global"; else
     printf 'Global profiles (%s):\n' "${OPS_GLOBAL_PROFILES_DIR}"
     if [[ "$(jq 'length' <<< "${profiles}")" -eq 0 ]]; then printf '  <none>\n'; else jq -r '.[] | "  " + .' <<< "${profiles}"; fi
   fi
@@ -146,7 +147,7 @@ _list_profiles() {
 _show_profile() {
   [[ -n "${PROFILE_ID}" ]] || die "Global profile name required." 2
   local profile_json; profile_json="$(global_profile_json "${PROFILE_ID}")"
-  if [[ "${JSON}" == "true" ]]; then printf '%s\n' "${profile_json}"; else jq . <<< "${profile_json}"; fi
+  if [[ "${JSON}" == "true" ]]; then printf '%s\n' "${profile_json}" | ops_json_envelope "global"; else jq . <<< "${profile_json}"; fi
 }
 
 _project_ci_file() { printf '%s/ci.json' "${OPS_PROJECT_CONFIG_DIR}"; }
@@ -185,7 +186,7 @@ _current_profile() {
   raw="$(cat "${file}")"; ref="$(global_profile_ref_from_ci_json "${raw}")"
   [[ -n "${ref}" ]] || die "Project has no global profile. Run: ops global use NAME --apply" 2
   resolved="$(global_profile_resolve_ci_json "${raw}")"
-  if [[ "${JSON}" == "true" ]]; then printf '%s\n' "${resolved}"; else
+  if [[ "${JSON}" == "true" ]]; then printf '%s\n' "${resolved}" | ops_json_envelope "global"; else
     printf 'Global profile: %s\n' "${ref}"
     jq -r '"SSH: " + (.deploy.user // "") + "@" + (.deploy.host // ""), "Deploy path: " + (.deploy.path // ""), "Docker: " + (.docker.registry // "") + "/" + (.docker.namespace // "")' <<< "${resolved}"
   fi

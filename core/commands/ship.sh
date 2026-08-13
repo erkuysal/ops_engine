@@ -6,6 +6,7 @@ set -euo pipefail
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 source "${_SELF_DIR}/../lib/logger.sh"
+source "${_SELF_DIR}/../lib/output.sh"
 source "${_SELF_DIR}/../lib/shipping.sh"
 
 PIPELINE=""
@@ -128,7 +129,7 @@ PLAN="$(shipping_plan_json "${CONFIG_FILE}" "${PIPELINE}" "${JOB}" "${TAG}" "${O
   "${BUILD}" "${PUBLISH}" "${TRANSFER}" "${DEPLOY}" "${VERIFY}")"
 
 if [[ "${JSON}" == "true" ]]; then
-  jq . <<< "${PLAN}"
+  jq . <<< "${PLAN}" | ops_json_envelope "ship"
   exit 0
 fi
 

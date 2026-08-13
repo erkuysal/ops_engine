@@ -19,6 +19,8 @@ _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_SELF_DIR}/../lib/init.sh"
 # shellcheck source=../lib/logger.sh
 source "${_SELF_DIR}/../lib/logger.sh"
+# shellcheck source=../lib/output.sh
+source "${_SELF_DIR}/../lib/output.sh"
 # shellcheck source=../lib/manifest.sh
 source "${_SELF_DIR}/../lib/manifest.sh"
 # shellcheck source=../lib/settings.sh
@@ -33,17 +35,29 @@ if [[ "${1:-}" == "boundaries" || "${1:-}" == "boundary" ]]; then
   exit $?
 fi
 
+JSON=false
+for _arg in "$@"; do
+  [[ "${_arg}" == "--json" ]] && JSON=true
+done
+
 _PASS=0
 _WARN=0
 _FAIL=0
+_CHECKS_JSON='[]'
 
-_check_pass() { ops_ok    "  ✔  $*"; _PASS=$((_PASS+1)); }
-_check_warn() { ops_warn  "  ⚠   $*"; _WARN=$((_WARN+1)); }
-_check_fail() { ops_error "  ✘  $*"; _FAIL=$((_FAIL+1)); }
+_record_check() {
+  require_bins jq
+  _CHECKS_JSON="$(jq -c --arg status "$1" --arg message "$2" '. + [{status: $status, message: $message}]' <<< "${_CHECKS_JSON}")"
+}
+_check_pass() { [[ "${JSON}" == "true" ]] || ops_ok    "  ✔  $*"; _record_check pass "$*"; _PASS=$((_PASS+1)); }
+_check_warn() { [[ "${JSON}" == "true" ]] || ops_warn  "  ⚠   $*"; _record_check warn "$*"; _WARN=$((_WARN+1)); }
+_check_fail() { [[ "${JSON}" == "true" ]] || ops_error "  ✘  $*"; _record_check fail "$*"; _FAIL=$((_FAIL+1)); }
 
-ops_section "ops experimental doctor"
-ops_info "Checking orchestrator prerequisites..."
-printf '\n'
+if [[ "${JSON}" != "true" ]]; then
+  ops_section "ops experimental doctor"
+  ops_info "Checking orchestrator prerequisites..."
+  printf '\n'
+fi
 
 # ── Bash version ────────────────────────────────────────────────────────────
 _bash_major="${BASH_VERSINFO[0]:-0}"
@@ -167,10 +181,17 @@ else
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
-printf '\n'
-if [[ "${OPS_PLAIN}" == "true" ]]; then
+if [[ "${JSON}" == "true" ]]; then
+  jq -n \
+    --argjson checks "${_CHECKS_JSON}" \
+    --argjson passed "${_PASS}" --argjson warned "${_WARN}" --argjson failed "${_FAIL}" \
+    '{summary: {passed: $passed, warnings: $warned, failed: $failed}, checks: $checks}' \
+    | ops_json_envelope "doctor"
+elif [[ "${OPS_PLAIN}" == "true" ]]; then
+  printf '\n'
   printf 'Doctor summary: %d passed, %d warnings, %d failed\n' "${_PASS}" "${_WARN}" "${_FAIL}"
 else
+  printf '\n'
   printf '%s' "${OPS_BOLD}"
   printf 'Doctor summary: %s%d passed%s  %s%d warnings%s  %s%d failed%s\n' \
     "${OPS_GREEN}" "${_PASS}" "${OPS_NC}${OPS_BOLD}" \

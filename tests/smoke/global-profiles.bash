@@ -17,7 +17,7 @@ suite_global_profiles() {
   assert_eq "global profile file is private" "600" "$(stat -c '%a' "${global_home}/profiles/personal-vps.json")"
 
   json="$(OPS_GLOBAL_CONFIG_HOME="${global_home}" ops_run "${root}" global list --json)"
-  assert_eq "global profile listed" "personal-vps" "$(jq -r '.[0]' <<< "${json}")"
+  assert_eq "global profile listed" "personal-vps" "$(jq -r '.profiles[0]' <<< "${json}")"
 
   OPS_GLOBAL_CONFIG_HOME="${global_home}" assert_ok "project selects global profile" \
     ops_run "${root}" global use personal-vps --project-path=/srv/custom-app --apply
