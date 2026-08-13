@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ops capability manifest",
+  "type": "object",
+  "required": ["version", "commands"],
+  "properties": {
+    "version": { "const": 1 },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "summary", "status", "safety", "script"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+          "aliases": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[a-z][a-z-]*$" },
+            "uniqueItems": true
+          },
+          "summary": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["live", "experimental"] },
+          "safety": {
+            "description": "read_only: never mutates. preview_by_default: mutates only with an explicit --apply (or equivalent), safe to run without one. live_by_default: mutates immediately unless an explicit --dry-run is passed. always_mutates: no preview mechanism at all. plan_only: mutation is not implemented yet regardless of flags.",
+            "enum": [
+              "read_only",
+              "preview_by_default",
+              "live_by_default",
+              "always_mutates",
+              "plan_only"
+            ]
+          },
+          "notes": { "type": "string" },
+          "script": { "type": ["string", "null"] },
+          "doc": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

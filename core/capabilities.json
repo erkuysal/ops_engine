@@ -1,0 +1,261 @@
+{
+  "version": 1,
+  "commands": [
+    {
+      "id": "doctor",
+      "summary": "Check orchestrator prerequisites",
+      "status": "live",
+      "safety": "read_only",
+      "notes": "Run 'ops doctor boundaries' for package boundary checks. Never writes; suggests other commands (e.g. 'ops setup --apply') when state is missing.",
+      "script": "core/commands/doctor.sh",
+      "doc": "docs/commands/doctor.md"
+    },
+    {
+      "id": "bootstrap",
+      "summary": "Seed project config from probe-based workspace discovery",
+      "status": "live",
+      "safety": "preview_by_default",
+      "notes": "Compatibility wrapper around 'ops setup'. --dry-run previews; --force applies (setup apply-services --apply).",
+      "script": "core/commands/bootstrap.sh",
+      "doc": "docs/commands/bootstrap.md"
+    },
+    {
+      "id": "validate",
+      "summary": "Project config validator",
+      "status": "live",
+      "safety": "read_only",
+      "script": "core/commands/validate.sh",
+      "doc": "docs/commands/validate.md"
+    },
+    {
+      "id": "install",
+      "summary": "Install/doctor/repair global ops command",
+      "status": "live",
+      "safety": "live_by_default",
+      "notes": "Writes the managed launcher and package copy immediately unless --dry-run is passed. 'ops install doctor' (a subcommand, not this command's own safety) is read-only.",
+      "script": "core/commands/install.sh",
+      "doc": "docs/commands/install.md"
+    },
+    {
+      "id": "global",
+      "summary": "Machine-global deployment profiles",
+      "status": "live",
+      "safety": "preview_by_default",
+      "notes": "'ops global setup'/'ops global use' preview by default; require --apply to write.",
+      "script": "core/commands/global.sh",
+      "doc": "docs/commands/global.md"
+    },
+    {
+      "id": "setup",
+      "summary": "Project setup/profile generation",
+      "status": "live",
+      "safety": "preview_by_default",
+      "notes": "Guided/module setup previews by default; requires --apply to write .ops.project/config. Non-interactive shells default to preview even without --dry-run.",
+      "script": "core/commands/setup.sh",
+      "doc": "docs/commands/setup.md"
+    },
+    {
+      "id": "ci",
+      "summary": "CI/server credential readiness config",
+      "status": "live",
+      "safety": "preview_by_default",
+      "notes": "'ops ci setup' previews connection metadata by default; requires --apply to write .ops.project/config/ci.json.",
+      "script": "core/commands/ci.sh",
+      "doc": "docs/commands/ci.md"
+    },
+    {
+      "id": "ssh",
+      "summary": "Simple server SSH connection check",
+      "status": "live",
+      "safety": "preview_by_default",
+      "notes": "Dispatches to 'ci.sh connect' ('ci.sh ssh-setup' for 'ops ssh setup'). Without --apply it prints the SSH command instead of running it.",
+      "script": "core/commands/ci.sh",
+      "doc": "docs/commands/ci.md"
+    },
+    {
+      "id": "credentials",
+      "aliases": ["creds"],
+      "summary": "Local credential readiness check",
+      "status": "live",
+      "safety": "read_only",
+      "notes": "Dispatches to 'ci.sh credentials'. Checks Docker/SSH/env readiness without printing secret values; never writes.",
+      "script": "core/commands/ci.sh",
+      "doc": "docs/commands/ci.md"
+    },
+    {
+      "id": "init",
+      "summary": "Interactive manifest wizard",
+      "status": "live",
+      "safety": "preview_by_default",
+      "script": "core/commands/init.sh",
+      "doc": "docs/commands/init.md"
+    },
+    {
+      "id": "run",
+      "summary": "Single-service action runner",
+      "status": "live",
+      "safety": "always_mutates",
+      "notes": "Executes the resolved action immediately; there is no --dry-run or --apply gate on 'run' itself. Use 'ops show' first to inspect the plan.",
+      "script": "core/commands/run.sh",
+      "doc": "docs/commands/run.md"
+    },
+    {
+      "id": "show",
+      "summary": "Read-only action execution plan inspector",
+      "status": "live",
+      "safety": "read_only",
+      "notes": "Prints the resolved plan for 'ops run <action> <service>' without executing it. The safe way to preview what 'run' would do.",
+      "script": "core/commands/show.sh",
+      "doc": "docs/commands/show.md"
+    },
+    {
+      "id": "start",
+      "summary": "Dependency-aware service start",
+      "status": "live",
+      "safety": "live_by_default",
+      "notes": "Starts the resolved service(s) immediately unless --dry-run is passed.",
+      "script": "core/commands/start.sh",
+      "doc": "docs/commands/start.md"
+    },
+    {
+      "id": "stop",
+      "summary": "Dependency-aware service stop",
+      "status": "live",
+      "safety": "always_mutates",
+      "notes": "No --dry-run or --apply gate exists for this command; it stops the target immediately when called.",
+      "script": "core/commands/stop.sh",
+      "doc": "docs/commands/stop.md"
+    },
+    {
+      "id": "status",
+      "aliases": ["ps"],
+      "summary": "Service runtime status",
+      "status": "live",
+      "safety": "read_only",
+      "script": "core/commands/status.sh",
+      "doc": "docs/commands/status.md"
+    },
+    {
+      "id": "logs",
+      "summary": "Multiplexed service logs",
+      "status": "live",
+      "safety": "read_only",
+      "script": "core/commands/logs.sh",
+      "doc": "docs/commands/logs.md"
+    },
+    {
+      "id": "cleanup",
+      "aliases": ["clean"],
+      "summary": "Remove stale generated runtime state",
+      "status": "live",
+      "safety": "preview_by_default",
+      "notes": "All categories preview by default; nothing is removed without --apply.",
+      "script": "core/commands/cleanup.sh",
+      "doc": "docs/commands/cleanup.md"
+    },
+    {
+      "id": "backup",
+      "summary": "Snapshot project config",
+      "status": "live",
+      "safety": "preview_by_default",
+      "notes": "'create'/'list'/'show'/'diff' are always safe (create is additive, the rest are read-only). 'prune' and 'rollback' preview by default and require --apply to mutate.",
+      "script": "core/commands/backup.sh",
+      "doc": "docs/commands/backup.md"
+    },
+    {
+      "id": "rollback",
+      "summary": "Restore project config snapshot",
+      "status": "live",
+      "safety": "preview_by_default",
+      "notes": "Direct alias for 'ops backup rollback'. Previews by default; requires --apply to overwrite current config from a snapshot.",
+      "script": "core/commands/rollback.sh",
+      "doc": "docs/commands/backup.md"
+    },
+    {
+      "id": "package",
+      "summary": "Inspect ops package checkout/install state",
+      "status": "live",
+      "safety": "read_only",
+      "script": "core/commands/package.sh",
+      "doc": "docs/commands/package.md"
+    },
+    {
+      "id": "monitor",
+      "summary": "Lightweight service/infra checks",
+      "status": "live",
+      "safety": "preview_by_default",
+      "notes": "'doctor'/'hosts'/'postgres' subcommands are read-only checks; only 'monitor setup' writes config, and it previews by default and requires --apply.",
+      "script": "core/commands/monitor.sh",
+      "doc": "docs/commands/monitor.md"
+    },
+    {
+      "id": "ship",
+      "summary": "Unified delivery pipeline planner",
+      "status": "live",
+      "safety": "plan_only",
+      "notes": "Execution is not implemented yet: 'ops ship' always produces a plan and refuses to run it regardless of flags. Use the legacy ship path ('./ops.sh legacy ship run --yes' from the parent project) for real deploys.",
+      "script": "core/commands/ship.sh",
+      "doc": "docs/commands/ship.md"
+    },
+    {
+      "id": "build",
+      "summary": "Native container build/push basics",
+      "status": "live",
+      "safety": "live_by_default",
+      "notes": "Builds (and pushes with --push) immediately unless --dry-run is passed.",
+      "script": "core/commands/build.sh",
+      "doc": "docs/commands/build.md"
+    },
+    {
+      "id": "deploy",
+      "summary": "Native remote container deploy basics",
+      "status": "live",
+      "safety": "live_by_default",
+      "notes": "Deploys immediately unless --dry-run is passed.",
+      "script": "core/commands/deploy.sh",
+      "doc": "docs/commands/deploy.md"
+    },
+    {
+      "id": "update",
+      "summary": "Manifest self-healing update",
+      "status": "live",
+      "safety": "preview_by_default",
+      "notes": "Compatibility wrapper around 'ops setup'; --apply applies, otherwise previews.",
+      "script": "core/commands/update.sh",
+      "doc": "docs/commands/update.md"
+    },
+    {
+      "id": "env",
+      "summary": "show/doctor env context",
+      "status": "live",
+      "safety": "read_only",
+      "script": "core/commands/env.sh",
+      "doc": "docs/commands/env.md"
+    },
+    {
+      "id": "describe",
+      "summary": "Machine-readable command capability manifest",
+      "status": "live",
+      "safety": "read_only",
+      "notes": "This command. Reads core/capabilities.json, the file this entry itself lives in.",
+      "script": "core/commands/describe.sh",
+      "doc": "docs/commands/describe.md"
+    },
+    {
+      "id": "version",
+      "summary": "Print orchestrator version",
+      "status": "live",
+      "safety": "read_only",
+      "script": null,
+      "doc": null
+    },
+    {
+      "id": "help",
+      "summary": "Print this help",
+      "status": "live",
+      "safety": "read_only",
+      "script": null,
+      "doc": null
+    }
+  ]
+}

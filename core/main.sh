@@ -35,6 +35,7 @@
 #   build     — Native container build/push basics (LIVE)
 #   deploy    — Native remote container deploy basics (LIVE)
 #   update    — Manifest self-healing update (LIVE)
+#   describe  — Machine-readable command capability manifest (LIVE)
 #   version   — Print orchestrator version
 #   help      — Print this help
 
@@ -95,6 +96,7 @@ Commands:
   deploy    Native remote container deploy    [live]
   update    Manifest self-healing update      [live]
   env       show/doctor env context           [live]
+  describe  Command capability manifest (agent/scripting) [live]
   version   Print version
   help      Print this help
 
@@ -148,6 +150,7 @@ ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_BOLD}deploy${OPS_NC}    Native remote container deploy    ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}update${OPS_NC}    Manifest self-healing update      ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}env${OPS_NC}       show / doctor env context          ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}describe${OPS_NC}  Command capability manifest (agent/scripting) ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}version${OPS_NC}   Print version
   ${OPS_BOLD}help${OPS_NC}      Print this help
 
@@ -301,6 +304,10 @@ case "${COMMAND}" in
 
   env)
     exec bash "${_MAIN_DIR}/commands/env.sh" "$@"
+    ;;
+
+  describe)
+    exec bash "${_MAIN_DIR}/commands/describe.sh" "$@"
     ;;
 
   *)

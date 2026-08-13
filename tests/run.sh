@@ -59,6 +59,8 @@ source "${SCRIPT_DIR}/smoke/container-pipeline.bash"
 source "${SCRIPT_DIR}/smoke/shipping.bash"
 # shellcheck source=smoke/libs.bash
 source "${SCRIPT_DIR}/smoke/libs.bash"
+# shellcheck source=smoke/capabilities.bash
+source "${SCRIPT_DIR}/smoke/capabilities.bash"
 
 suite_cli
 suite_doctor
@@ -87,5 +89,6 @@ suite_global_profiles
 suite_container_pipeline
 suite_shipping
 suite_libs
+suite_capabilities
 
 harness_summary
