@@ -241,10 +241,13 @@ _monitor_env_upsert() {
   [[ -n "${key}" && "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 0
   ensure_dir "$(dirname "${INFRA_ENV_FILE}")"
   if [[ ! -f "${INFRA_ENV_FILE}" ]]; then
-    {
-      printf '# Local ops infra secrets.\n'
-      printf '# This file is local-only. Do not commit it.\n\n'
-    } > "${INFRA_ENV_FILE}"
+    (
+      umask 077
+      {
+        printf '# Local ops infra secrets.\n'
+        printf '# This file is local-only. Do not commit it.\n\n'
+      } > "${INFRA_ENV_FILE}"
+    )
     chmod 600 "${INFRA_ENV_FILE}" 2>/dev/null || true
   fi
 
@@ -269,7 +272,7 @@ _monitor_env_upsert() {
 _write_monitor_env_template() {
   ensure_dir "$(dirname "${INFRA_ENV_FILE}")"
   if [[ ! -f "${INFRA_ENV_FILE}" ]]; then
-    _monitor_env_template > "${INFRA_ENV_FILE}"
+    ( umask 077; _monitor_env_template > "${INFRA_ENV_FILE}" )
     chmod 600 "${INFRA_ENV_FILE}" 2>/dev/null || true
     _monitor_gitignore
     ops_ok "Created ${INFRA_ENV_REL}"

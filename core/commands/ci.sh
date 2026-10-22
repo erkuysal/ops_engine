@@ -802,7 +802,7 @@ _ci_env_init() {
     ops_ok "env file already exists"
   elif [[ "${APPLY}" == "true" ]]; then
     mkdir -p "$(dirname "${expanded}")"
-    _ci_env_template > "${expanded}"
+    ( umask 077; _ci_env_template > "${expanded}" )
     chmod 600 "${expanded}" 2>/dev/null || true
     _write_ci_gitignore
     ops_ok "Created ${env_file}"
