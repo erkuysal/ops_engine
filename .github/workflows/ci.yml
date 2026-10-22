@@ -72,4 +72,4 @@ jobs:
 
       - name: Lint core scripts
         run: |
-          find core -name '*.sh' -print0 | xargs -0 shellcheck --severity=error -e SC1091,SC2034,SC2154
+          find core -name '*.sh' -print0 | xargs -0 shellcheck --severity=info -e SC1091,SC2034,SC2154

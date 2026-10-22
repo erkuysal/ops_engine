@@ -101,7 +101,11 @@ container_project_name() {
   if [[ -f "${OPS_PROJECT_CONFIG_DIR}/project.json" ]]; then
     name="$(jq -r '.name // empty' "${OPS_PROJECT_CONFIG_DIR}/project.json" 2>/dev/null | sed -n '1p')"
   fi
-  [[ -n "${name:-}" ]] && printf '%s' "${name}" || basename "${OPS_PROJECT_ROOT}"
+  if [[ -n "${name:-}" ]]; then
+    printf '%s' "${name}"
+  else
+    basename "${OPS_PROJECT_ROOT}"
+  fi
 }
 
 container_service_json_by_id() {

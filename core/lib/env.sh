@@ -63,7 +63,7 @@ _env_should_skip_in_ci() {
   local base
   base="$(basename "${file}")"
   case "${base}" in
-    *.local|.env.local|*.local.env|*.local.*) return 0 ;;
+    *.local|*.local.env|*.local.*) return 0 ;;
   esac
   return 1
 }

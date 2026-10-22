@@ -98,7 +98,7 @@ manifest_export_yaml() {
   fi
 
   printf '%s\n' "${json}" | yq e -P - > "${target}"
-  ops_ok "Exported project config to ${target#${OPS_PROJECT_ROOT}/}"
+  ops_ok "Exported project config to ${target#"${OPS_PROJECT_ROOT}"/}"
 }
 
 manifest_import_yaml() {

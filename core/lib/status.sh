@@ -12,7 +12,7 @@ source "${OPS_CORE_ROOT}/lib/setup.sh"
 
 status_config_source_rel() {
   if project_config_services_exists; then
-    printf '%s' "${OPS_PROJECT_CONFIG_SERVICES_FILE#${OPS_PROJECT_ROOT}/}"
+    printf '%s' "${OPS_PROJECT_CONFIG_SERVICES_FILE#"${OPS_PROJECT_ROOT}"/}"
   else
     printf '%s' ".ops.yaml"
   fi
@@ -116,11 +116,13 @@ status_collect_process_rows() {
     while IFS= read -r name; do
       [[ -z "${name}" || "${name}" == "null" ]] && continue
       pid_file="${run_dir}/${name}.pid"
-      rel="${pid_file#${OPS_PROJECT_ROOT}/}"
+      rel="${pid_file#"${OPS_PROJECT_ROOT}"/}"
       if pid="$(status_read_pid_file "${pid_file}" 2>/dev/null)"; then
         printf '%s%s%s%s%s\n' "${name}" "${_STATUS_FS}" "${pid}" "${_STATUS_FS}" "${rel}"
       else
-        [[ -f "${pid_file}" ]] && rm -f "${pid_file}" 2>/dev/null || true
+        if [[ -f "${pid_file}" ]]; then
+          rm -f "${pid_file}" 2>/dev/null || true
+        fi
         printf '%s%s%s%s%s\n' "${name}" "${_STATUS_FS}" "" "${_STATUS_FS}" "${rel}"
       fi
     done < <(project_get_service_list_field "${svc_id}" "run.processes.name")
@@ -131,7 +133,7 @@ status_collect_process_rows() {
         [[ -f "${stale}" ]] || continue
         name="$(basename "${stale}" .pid)"
         if ! project_get_service_list_field "${svc_id}" "run.processes.name" | grep -qxF "${name}"; then
-          rel="${stale#${OPS_PROJECT_ROOT}/}"
+          rel="${stale#"${OPS_PROJECT_ROOT}"/}"
           if pid="$(status_read_pid_file "${stale}" 2>/dev/null)"; then
             printf '%s%s%s%s%s\n' "${name}" "${_STATUS_FS}" "${pid}" "${_STATUS_FS}" "${rel}"
           fi
@@ -142,11 +144,13 @@ status_collect_process_rows() {
   fi
 
   pid_file="${OPS_PROJECT_RUN_DIR}/${svc_id}.pid"
-  rel="${pid_file#${OPS_PROJECT_ROOT}/}"
+  rel="${pid_file#"${OPS_PROJECT_ROOT}"/}"
   if pid="$(status_read_pid_file "${pid_file}" 2>/dev/null)"; then
     printf '%s%s%s%s%s\n' "${svc_id}" "${_STATUS_FS}" "${pid}" "${_STATUS_FS}" "${rel}"
   else
-    [[ -f "${pid_file}" ]] && rm -f "${pid_file}" 2>/dev/null || true
+    if [[ -f "${pid_file}" ]]; then
+      rm -f "${pid_file}" 2>/dev/null || true
+    fi
     printf '%s%s%s%s%s\n' "${svc_id}" "${_STATUS_FS}" "" "${_STATUS_FS}" "${rel}"
   fi
 }

@@ -144,7 +144,7 @@ _go_start_process() {
   echo "${pid}" > "${pid_file}"
   sleep 0.3
   if kill -0 "${pid}" 2>/dev/null; then
-    printf '[OK] %s started (PID %s, log %s)\n' "${name}" "${pid}" "${log_file#${OPS_PROJECT_ROOT}/}"
+    printf '[OK] %s started (PID %s, log %s)\n' "${name}" "${pid}" "${log_file#"${OPS_PROJECT_ROOT}"/}"
     return 0
   fi
   printf '[ERROR] %s failed to start; log follows:\n' "${name}" >&2

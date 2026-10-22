@@ -175,7 +175,7 @@ _use_profile() {
   if [[ "${APPLY}" == "true" ]]; then
     ensure_dir "${OPS_PROJECT_CONFIG_DIR}"
     printf '%s\n' "${config_json}" > "${file}"
-    ops_ok "Updated project profile reference: ${file#${OPS_PROJECT_ROOT}/}"
+    ops_ok "Updated project profile reference: ${file#"${OPS_PROJECT_ROOT}"/}"
   else ops_info "Preview only. Use --apply to select this profile."; fi
 }
 

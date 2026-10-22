@@ -2,6 +2,12 @@
 # .ops-core/commands/logs.sh — Multi-service log tailing.
 #
 # Usage: ops experimental logs [<service_id> | --all] [--follow]
+#
+# OPS_LOG_SERVICE is intentionally exported inside each `( ... ) &` subshell
+# below: it labels that subshell's own piped _ops_log_stream output and is
+# never read outside that subshell, so the SC2030/SC2031 "change might be
+# lost" warnings do not apply here.
+# shellcheck disable=SC2030,SC2031
 
 set -euo pipefail
 

@@ -318,14 +318,14 @@ _pass5_overrides() {
       
       # Check executable bit
       if [[ ! -x "${override_file}" ]]; then
-        _err "Overrides — not executable: ${override_file#${OPS_PROJECT_ROOT}/} (run chmod +x)"
+        _err "Overrides — not executable: ${override_file#"${OPS_PROJECT_ROOT}"/} (run chmod +x)"
       fi
       
       # Check shebang
       local shebang
       shebang="$(head -n 1 "${override_file}" 2>/dev/null || true)"
       if [[ "${shebang}" != "#!/usr/bin/env bash" && "${shebang}" != "#!/bin/bash" ]]; then
-        _warn "Overrides — missing or non-bash shebang: ${override_file#${OPS_PROJECT_ROOT}/} (expected #!/usr/bin/env bash)"
+        _warn "Overrides — missing or non-bash shebang: ${override_file#"${OPS_PROJECT_ROOT}"/} (expected #!/usr/bin/env bash)"
       fi
       
     done < <(find "${cmd_dir}" -type f -name "*.sh" 2>/dev/null || true)

@@ -170,10 +170,10 @@ _monitor_gitignore() {
       printf 'logs/\n'
       printf 'run/\n'
     } > "${file}"
-    ops_ok "Wrote ${file#${OPS_PROJECT_ROOT}/}"
+    ops_ok "Wrote ${file#"${OPS_PROJECT_ROOT}"/}"
   elif ! grep -qx 'secrets/' "${file}" 2>/dev/null; then
     printf 'secrets/\n' >> "${file}"
-    ops_ok "Updated ${file#${OPS_PROJECT_ROOT}/}"
+    ops_ok "Updated ${file#"${OPS_PROJECT_ROOT}"/}"
   fi
 }
 
@@ -336,9 +336,9 @@ _run_doctor() {
     fi
   done
   if [[ -f "${MONITOR_CONFIG}" ]]; then
-    ops_ok "monitor config: ${MONITOR_CONFIG#${OPS_PROJECT_ROOT}/}"
+    ops_ok "monitor config: ${MONITOR_CONFIG#"${OPS_PROJECT_ROOT}"/}"
   else
-    ops_info "monitor config: optional file not found (${MONITOR_CONFIG#${OPS_PROJECT_ROOT}/})"
+    ops_info "monitor config: optional file not found (${MONITOR_CONFIG#"${OPS_PROJECT_ROOT}"/})"
   fi
   if [[ -f "${INFRA_ENV_FILE}" ]]; then
     ops_ok "infra env: ${INFRA_ENV_REL}"
@@ -606,11 +606,11 @@ _run_setup() {
     fi
     if [[ "${JSON}" != "true" ]]; then
       ops_section "ops monitor setup"
-      ops_ok "Wrote ${MONITOR_CONFIG#${OPS_PROJECT_ROOT}/}"
+      ops_ok "Wrote ${MONITOR_CONFIG#"${OPS_PROJECT_ROOT}"/}"
     fi
   elif [[ "${JSON}" != "true" ]]; then
     ops_section "ops monitor setup"
-    ops_info "Preview only. Use --apply to write ${MONITOR_CONFIG#${OPS_PROJECT_ROOT}/}."
+    ops_info "Preview only. Use --apply to write ${MONITOR_CONFIG#"${OPS_PROJECT_ROOT}"/}."
     if [[ "${ADD_POSTGRES}" == "true" || "${ADD_REDIS}" == "true" ]]; then
       ops_info "Would create ${INFRA_ENV_REL} for local infra credentials if missing."
     fi

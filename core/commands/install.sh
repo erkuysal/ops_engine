@@ -125,6 +125,7 @@ _path_contains_dir() {
 _shell_rc_hint() {
   local shell_name
   shell_name="$(basename "${SHELL:-sh}")"
+  # shellcheck disable=SC2088 # literal display text for the user, not a path to expand
   case "${shell_name}" in
     zsh) printf '~/.zshrc' ;;
     bash) printf '~/.bashrc or ~/.bash_profile' ;;

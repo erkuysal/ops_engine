@@ -19,6 +19,7 @@ run_plan_file() {
 
 run_plan_stack_default_command() {
   local stack="${1:-}" action="${2:-start}"
+  # shellcheck disable=SC2016 # ${OPS_SERVICE_ID} below is a literal display placeholder, not an expansion
   case "${stack}:${action}" in
     django:start) printf 'python -u manage.py runserver 0.0.0.0:8000' ;;
     django:test) printf 'python manage.py test' ;;
@@ -129,10 +130,10 @@ run_plan_generate_json() {
   start_preview_wait="$(ops_setting_int '.start.preview.wait_seconds' '1')"
 
   if project_config_services_exists; then
-    config_source="${OPS_PROJECT_CONFIG_SERVICES_FILE#${OPS_PROJECT_ROOT}/}"
-    compatibility_export="${OPS_MANIFEST#${OPS_PROJECT_ROOT}/}"
+    config_source="${OPS_PROJECT_CONFIG_SERVICES_FILE#"${OPS_PROJECT_ROOT}"/}"
+    compatibility_export="${OPS_MANIFEST#"${OPS_PROJECT_ROOT}"/}"
   else
-    config_source="${OPS_MANIFEST#${OPS_PROJECT_ROOT}/}"
+    config_source="${OPS_MANIFEST#"${OPS_PROJECT_ROOT}"/}"
     compatibility_export=""
   fi
 

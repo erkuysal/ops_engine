@@ -391,7 +391,7 @@ _write_project_gitignore() {
       printf 'profiles/\n'
       printf '.history/\n'
     } > "${file}"
-    ops_ok "Wrote ${file#${OPS_PROJECT_ROOT}/}"
+    ops_ok "Wrote ${file#"${OPS_PROJECT_ROOT}"/}"
   else
     local changed=false
     for item in 'secrets/' 'logs/' 'run/' 'cache/' 'generated/' 'profiles/' '.history/'; do
@@ -400,7 +400,7 @@ _write_project_gitignore() {
         changed=true
       fi
     done
-    [[ "${changed}" == "true" ]] && ops_ok "Updated ${file#${OPS_PROJECT_ROOT}/}"
+    [[ "${changed}" == "true" ]] && ops_ok "Updated ${file#"${OPS_PROJECT_ROOT}"/}"
   fi
   return 0
 }
@@ -409,7 +409,7 @@ _write_project_launcher_file() {
   local file="$1"
 
   if [[ -e "${file}" ]]; then
-    ops_info "Project launcher exists: ${file#${OPS_PROJECT_ROOT}/}"
+    ops_info "Project launcher exists: ${file#"${OPS_PROJECT_ROOT}"/}"
     return 0
   fi
 
@@ -434,7 +434,7 @@ exit 1
 EOF
 
   chmod +x "${file}" 2>/dev/null || true
-  ops_ok "Wrote ${file#${OPS_PROJECT_ROOT}/}"
+  ops_ok "Wrote ${file#"${OPS_PROJECT_ROOT}"/}"
 }
 
 _write_project_launchers() {
@@ -484,12 +484,12 @@ _ensure_project_base() {
 
 _run_project_setup() {
   ops_section "ops setup project"
-  printf 'Project state dir: %s\n' "${OPS_PROJECT_STATE_DIR#${OPS_PROJECT_ROOT}/}"
-  printf 'Config dir: %s\n' "${OPS_PROJECT_CONFIG_DIR#${OPS_PROJECT_ROOT}/}"
-  printf 'Generated dir: %s\n' "${OPS_PROJECT_GENERATED_DIR#${OPS_PROJECT_ROOT}/}"
-  printf 'Logs dir: %s\n' "${OPS_PROJECT_LOG_DIR#${OPS_PROJECT_ROOT}/}"
-  printf 'Run dir: %s\n' "${OPS_PROJECT_RUN_DIR#${OPS_PROJECT_ROOT}/}"
-  printf 'Profiles dir: %s\n' "${OPS_PROFILES_DIR#${OPS_PROJECT_ROOT}/}"
+  printf 'Project state dir: %s\n' "${OPS_PROJECT_STATE_DIR#"${OPS_PROJECT_ROOT}"/}"
+  printf 'Config dir: %s\n' "${OPS_PROJECT_CONFIG_DIR#"${OPS_PROJECT_ROOT}"/}"
+  printf 'Generated dir: %s\n' "${OPS_PROJECT_GENERATED_DIR#"${OPS_PROJECT_ROOT}"/}"
+  printf 'Logs dir: %s\n' "${OPS_PROJECT_LOG_DIR#"${OPS_PROJECT_ROOT}"/}"
+  printf 'Run dir: %s\n' "${OPS_PROJECT_RUN_DIR#"${OPS_PROJECT_ROOT}"/}"
+  printf 'Profiles dir: %s\n' "${OPS_PROFILES_DIR#"${OPS_PROJECT_ROOT}"/}"
 
   if [[ "${APPLY}" != "true" ]]; then
     printf '\n'
@@ -1585,7 +1585,7 @@ _run_discovery() {
     printf '%s\n' "${discovery_json}" > "${OPS_DISCOVERY_FILE}"
     discovery_file="${OPS_DISCOVERY_FILE}"
     printf '\n'
-    ops_ok "Wrote ${discovery_file#${OPS_PROJECT_ROOT}/}"
+    ops_ok "Wrote ${discovery_file#"${OPS_PROJECT_ROOT}"/}"
   else
     printf '\n'
     ops_info "Preview only. Use --apply to write .ops.project/generated/discovery.json."
@@ -1915,7 +1915,7 @@ _backup_file() {
   mkdir -p "${OPS_PROJECT_HISTORY_DIR}"
   dest="${OPS_PROJECT_HISTORY_DIR}/$(basename "${file}").${ts}.bak"
   cp "${file}" "${dest}"
-  ops_ok "Backed up ${file#${OPS_PROJECT_ROOT}/} -> ${dest#${OPS_PROJECT_ROOT}/}"
+  ops_ok "Backed up ${file#"${OPS_PROJECT_ROOT}"/} -> ${dest#"${OPS_PROJECT_ROOT}"/}"
 }
 
 _auto_backup_config() {
@@ -1972,7 +1972,7 @@ _apply_generated() {
     printf '%s\n' "$(cat "${discovery_tmp}")" > "${OPS_DISCOVERY_FILE}"
     discovery_file="${OPS_DISCOVERY_FILE}"
     _materialize_project_config_from_discovery "$(cat "${discovery_tmp}")" "$(cat "${setup_tmp}")" "$(cat "${profile_tmp}")" "$(cat "${decisions_tmp}")"
-    ops_ok "Wrote ${discovery_file#${OPS_PROJECT_ROOT}/}"
+    ops_ok "Wrote ${discovery_file#"${OPS_PROJECT_ROOT}"/}"
   fi
   cp "${setup_tmp}" "${OPS_PROJECT_GENERATED_DIR}/setup.json"
   cp "${profile_tmp}" "$(setup_profile_file "${PROFILE}")"
@@ -1993,7 +1993,7 @@ _apply_generated() {
 _show_setup() {
   ops_section "ops setup show"
   printf 'Project config: .ops.project/config (%s)\n' "$(project_config_services_exists && printf exists || printf missing)"
-  printf 'YAML compatibility export: %s (%s)\n' "${OPS_MANIFEST#${OPS_PROJECT_ROOT}/}" "$([[ -f "${OPS_MANIFEST}" ]] && printf exists || printf missing)"
+  printf 'YAML compatibility export: %s (%s)\n' "${OPS_MANIFEST#"${OPS_PROJECT_ROOT}"/}" "$([[ -f "${OPS_MANIFEST}" ]] && printf exists || printf missing)"
   printf 'Profile: %s\n' "${PROFILE}"
   printf 'Materialized profile: %s (%s)\n' ".ops.project/profiles/${PROFILE}.json" "$( [[ -f "$(setup_profile_file "${PROFILE}")" ]] && printf exists || printf missing)"
   printf '\nSetup\n'
@@ -2025,7 +2025,7 @@ _run_export_yaml() {
   project_config_services_exists || die "Missing .ops.project/config/services.json. Run ops setup --apply first." 2
 
   if [[ "${APPLY}" != "true" ]]; then
-    ops_info "Preview only. Use --apply to write ${OPS_MANIFEST#${OPS_PROJECT_ROOT}/} from .ops.project/config."
+    ops_info "Preview only. Use --apply to write ${OPS_MANIFEST#"${OPS_PROJECT_ROOT}"/} from .ops.project/config."
     manifest_json_from_project_config | yq e -P '.' | head -n 60
     return 0
   fi
@@ -2125,7 +2125,9 @@ _run_plan_actions() {
   if [[ -z "${actions// /}" ]]; then
     actions="start status build test lint logs stop"
   fi
-  printf '%s\n' ${actions} | awk 'NF && !seen[$0]++'
+  local -a action_words
+  read -ra action_words <<< "${actions}"
+  printf '%s\n' "${action_words[@]}" | awk 'NF && !seen[$0]++'
 }
 
 _run_run_plans() {
@@ -2152,7 +2154,7 @@ _run_run_plans() {
         --arg service "${service_id}" \
         --arg action "${action}" \
         --arg status "${status}" \
-        --arg file "${file#${OPS_PROJECT_ROOT}/}" \
+        --arg file "${file#"${OPS_PROJECT_ROOT}"/}" \
         '. + [{service: $service, action: $action, status: $status, file: $file}]' \
         <<< "${report_json}")"
     done < <(_run_plan_actions)

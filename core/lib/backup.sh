@@ -104,7 +104,10 @@ ops_backup_restore() {
 # ============================================================================
 _ops_backup_prune() {
   local entries
-  mapfile -t entries < <(ls -1 "${_BACKUP_HISTORY_DIR}"/*.yaml 2>/dev/null | sort || true)
+  mapfile -t entries < <(
+    shopt -s nullglob
+    printf '%s\n' "${_BACKUP_HISTORY_DIR}"/*.yaml | sort
+  )
   local count="${#entries[@]}"
   if [[ ${count} -gt ${_BACKUP_MAX_ENTRIES} ]]; then
     local excess=$(( count - _BACKUP_MAX_ENTRIES ))

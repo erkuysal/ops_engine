@@ -64,7 +64,7 @@ detect_stack_for_dir() {
       { (( probe_score == best_score )) && [[ "${best_stack}" == "docker" && "${probe_name}" != "docker" ]]; }; 
     }; then
       best_score="${probe_score}"
-      probe_stack="$(declare -F "probe_${probe_name}_stack_id" >/dev/null 2>&1 && probe_${probe_name}_stack_id || printf '')"
+      probe_stack="$(declare -F "probe_${probe_name}_stack_id" >/dev/null 2>&1 && probe_"${probe_name}"_stack_id || printf '')"
       [[ -n "${probe_stack}" ]] && best_stack="${probe_stack}"
     fi
   done

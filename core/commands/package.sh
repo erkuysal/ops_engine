@@ -9,7 +9,9 @@ source "${_SELF_DIR}/../lib/logger.sh"
 source "${_SELF_DIR}/../lib/output.sh"
 
 SUBCMD="${1:-status}"
-[[ $# -gt 0 ]] && shift || true
+if [[ $# -gt 0 ]]; then
+  shift
+fi
 JSON=false
 
 _usage_package() {

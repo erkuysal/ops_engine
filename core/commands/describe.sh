@@ -55,6 +55,7 @@ require_bins jq
 
 _select_filter() {
   if [[ -n "${TARGET}" ]]; then
+    # shellcheck disable=SC2016 # $target below is a jq --arg variable, not a bash expansion
     printf '.commands | map(select(.id == $target or ((.aliases // []) | index($target)) != null))'
   else
     printf '.commands'

@@ -29,7 +29,7 @@ cleanup_stale_pid_files() {
     [[ -n "${file}" && -f "${file}" ]] || continue
     pid="$(cleanup_read_pid "${file}")"
     cleanup_pid_is_alive "${pid}" && continue
-    rel="${file#${OPS_PROJECT_ROOT}/}"
+    rel="${file#"${OPS_PROJECT_ROOT}"/}"
     if [[ "${apply}" == "true" ]]; then
       rm -f "${file}"
       printf 'removed stale pid: %s\n' "${rel}"
@@ -56,7 +56,7 @@ cleanup_old_log_files() {
 
   while IFS= read -r file; do
     [[ -n "${file}" && -f "${file}" ]] || continue
-    rel="${file#${OPS_PROJECT_ROOT}/}"
+    rel="${file#"${OPS_PROJECT_ROOT}"/}"
     if [[ "${apply}" == "true" ]]; then
       rm -f "${file}"
       printf 'removed old log: %s\n' "${rel}"
@@ -180,7 +180,7 @@ cleanup_generated_files() {
 
   while IFS= read -r file; do
     [[ -n "${file}" ]] || continue
-    rel="${file#${OPS_PROJECT_ROOT}/}"
+    rel="${file#"${OPS_PROJECT_ROOT}"/}"
     if [[ "${apply}" == "true" ]]; then
       rm -f -- "${file}"
       printf 'removed generated file: %s\n' "${rel}"
@@ -192,7 +192,9 @@ cleanup_generated_files() {
 
   if [[ "${apply}" == "true" ]]; then
     while IFS= read -r dir; do
-      [[ -n "${dir}" ]] && rmdir -- "${dir}" 2>/dev/null || true
+      if [[ -n "${dir}" ]]; then
+        rmdir -- "${dir}" 2>/dev/null || true
+      fi
     done < <(find "${generated_dir}" -mindepth 1 -type d -depth -print 2>/dev/null)
   fi
 

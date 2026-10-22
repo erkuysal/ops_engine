@@ -83,7 +83,7 @@ RUN_PLAN_JSON="$(run_plan_generate_json "${ACTION}" "${SVC_ID}")"
 RUN_PLAN_FILE="$(run_plan_write_json "${SVC_ID}" "${ACTION}" "${RUN_PLAN_JSON}")"
 
 if [[ "${JSON}" == "true" ]]; then
-  jq --arg run_plan_file "${RUN_PLAN_FILE#${OPS_PROJECT_ROOT}/}" '. + {run_plan_file: $run_plan_file}' \
+  jq --arg run_plan_file "${RUN_PLAN_FILE#"${OPS_PROJECT_ROOT}"/}" '. + {run_plan_file: $run_plan_file}' \
     <<< "${RUN_PLAN_JSON}" | ops_json_envelope "show"
   exit 0
 fi
@@ -281,14 +281,14 @@ printf '  path: %s\n' "${SVC_PATH}"
 printf '  working directory: %s\n' "${ABS_PATH}"
 printf '  action: %s\n' "${ACTION}"
 if project_config_services_exists; then
-  printf '  config source: %s\n' "${OPS_PROJECT_CONFIG_SERVICES_FILE#${OPS_PROJECT_ROOT}/}"
+  printf '  config source: %s\n' "${OPS_PROJECT_CONFIG_SERVICES_FILE#"${OPS_PROJECT_ROOT}"/}"
   printf '  YAML compatibility export: %s\n' "${OPS_MANIFEST}"
 else
   printf '  YAML compatibility source: %s\n' "${OPS_MANIFEST}"
 fi
 printf '  state dir: %s\n' "${OPS_PROJECT_STATE_DIR}"
 printf '  setup profile: %s\n' "${SETUP_PROFILE}"
-printf '  run plan: %s\n' "${RUN_PLAN_FILE#${OPS_PROJECT_ROOT}/}"
+printf '  run plan: %s\n' "${RUN_PLAN_FILE#"${OPS_PROJECT_ROOT}"/}"
 
 printf '\nResolution\n'
 if runner_is_managed_kind "${RUNNER_KIND}"; then
@@ -300,7 +300,7 @@ printf '  2. global override: .ops/commands/%s.sh (exists: %s, executable: %s)\n
   "${ACTION}" "$(_bool_file "${GLOBAL_OVERRIDE}")" "$(_bool_exec "${GLOBAL_OVERRIDE}")"
 printf '  3. setup command: %s\n' "${SETUP_CMD:-<empty>}"
 printf '  4. stack dispatcher: %s (exists: %s, function: %s)\n' \
-  "${STACK_FILE#${OPS_PROJECT_ROOT}/}" "$(_bool_file "${STACK_FILE}")" "${STACK_DISPATCH_FUNC}"
+  "${STACK_FILE#"${OPS_PROJECT_ROOT}"/}" "$(_bool_file "${STACK_FILE}")" "${STACK_DISPATCH_FUNC}"
 printf '  5. configured action: %s\n' "${EXPLICIT_CMD:-<empty>}"
 
 SELECTED_KIND="$(_run_plan_get '.resolution.selected.kind')"

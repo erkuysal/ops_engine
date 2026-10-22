@@ -134,7 +134,8 @@ _prompt_ci_yes_no() {
 _prompt_ci_choice() {
   local label="$1"
   shift
-  local options=("$@") choice total="${#options[@]}" index
+  local options=("$@") choice index
+  local total="${#options[@]}"
 
   printf '\n%s\n' "${label}" >&2
   index=1
@@ -219,7 +220,11 @@ _project_name() {
   if [[ -f "${OPS_PROJECT_CONFIG_DIR}/project.json" ]]; then
     name="$(jq -r '.name // empty' "${OPS_PROJECT_CONFIG_DIR}/project.json" 2>/dev/null || true)"
   fi
-  [[ -n "${name}" ]] && printf '%s' "${name}" || basename "${OPS_PROJECT_ROOT}"
+  if [[ -n "${name}" ]]; then
+    printf '%s' "${name}"
+  else
+    basename "${OPS_PROJECT_ROOT}"
+  fi
 }
 
 _existing_ci_get() {
@@ -387,7 +392,7 @@ _write_ci_config() {
   tmp="$(mktemp)"
   printf '%s\n' "${config_json}" > "${tmp}"
   mv "${tmp}" "${OPS_CI_CONFIG_FILE}"
-  ops_ok "Wrote ${OPS_CI_CONFIG_FILE#${OPS_PROJECT_ROOT}/}"
+  ops_ok "Wrote ${OPS_CI_CONFIG_FILE#"${OPS_PROJECT_ROOT}"/}"
 }
 
 _remote_docker_login() {
@@ -405,6 +410,7 @@ _remote_docker_login() {
   target="${user}@${host}"
   printf -v remote_command 'docker login %q' "${registry}"
   ops_info "Opening remote Docker login on ${target}"
+  # shellcheck disable=SC2029 # remote_command is already fully resolved locally via printf -v %q
   ssh "${ssh_args[@]}" "${target}" "${remote_command}"
 }
 
@@ -762,10 +768,10 @@ _write_ci_gitignore() {
       printf 'logs/\n'
       printf 'run/\n'
     } > "${file}"
-    ops_ok "Wrote ${file#${OPS_PROJECT_ROOT}/}"
+    ops_ok "Wrote ${file#"${OPS_PROJECT_ROOT}"/}"
   elif ! grep -qx 'secrets/' "${file}" 2>/dev/null; then
     printf 'secrets/\n' >> "${file}"
-    ops_ok "Updated ${file#${OPS_PROJECT_ROOT}/}"
+    ops_ok "Updated ${file#"${OPS_PROJECT_ROOT}"/}"
   fi
 }
 

@@ -311,7 +311,7 @@ if [[ "${JSON}" == "true" ]]; then
 elif [[ "${APPLY}" != "true" ]]; then
   ops_section "ops setup shipping"
   printf 'Proposal source: %s\n' "${source_label}"
-  printf 'Config path:     %s\n\n' "${config_file#${OPS_PROJECT_ROOT}/}"
+  printf 'Config path:     %s\n\n' "${config_file#"${OPS_PROJECT_ROOT}"/}"
   jq -r '
     .pipelines | to_entries[] |
     "Pipeline \(.key) -> \(.value.target):", (.value.jobs[] | "  - \(.id): \(.uses)")
@@ -327,7 +327,7 @@ if [[ "${APPLY}" == "true" ]]; then
     cp "${config_file}" "${OPS_PROJECT_HISTORY_DIR}/shipping.$(ops_timestamp | tr ':' '-').json"
   fi
   jq . "${tmp_file}" > "${config_file}"
-  ops_ok "Wrote ${config_file#${OPS_PROJECT_ROOT}/}"
+  ops_ok "Wrote ${config_file#"${OPS_PROJECT_ROOT}"/}"
 fi
 
 rm -f "${tmp_file}"

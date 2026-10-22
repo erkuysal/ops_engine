@@ -105,7 +105,7 @@ _config_files() {
 
 _backup_create() {
   require_bins jq
-  [[ -d "${OPS_PROJECT_CONFIG_DIR}" ]] || die "No config directory found: ${OPS_PROJECT_CONFIG_DIR#${OPS_PROJECT_ROOT}/}" 2
+  [[ -d "${OPS_PROJECT_CONFIG_DIR}" ]] || die "No config directory found: ${OPS_PROJECT_CONFIG_DIR#"${OPS_PROJECT_ROOT}"/}" 2
 
   local label ts id dir file rel files_json='[]'
   label="$(_safe_label "${LABEL:-manual}")"
@@ -212,7 +212,7 @@ _backup_diff() {
   dir="$(_find_snapshot "${SNAPSHOT_ID}")"
   ops_section "ops backup diff"
   printf 'Snapshot: %s\n' "$(basename "${dir}")"
-  printf 'Target: %s\n\n' "${OPS_PROJECT_CONFIG_DIR#${OPS_PROJECT_ROOT}/}"
+  printf 'Target: %s\n\n' "${OPS_PROJECT_CONFIG_DIR#"${OPS_PROJECT_ROOT}"/}"
   printf '  %-8s %s\n' "STATUS" "FILE"
   _snapshot_diff_status "${dir}" | while IFS=$'\t' read -r status name; do
     printf '  %-8s %s\n' "${status}" "${name}"
@@ -262,7 +262,7 @@ _rollback() {
 
   ops_section "ops rollback"
   printf 'Snapshot: %s\n' "$(basename "${dir}")"
-  printf 'Target: %s\n\n' "${OPS_PROJECT_CONFIG_DIR#${OPS_PROJECT_ROOT}/}"
+  printf 'Target: %s\n\n' "${OPS_PROJECT_CONFIG_DIR#"${OPS_PROJECT_ROOT}"/}"
   printf '  %-8s %s\n' "STATUS" "FILE"
   _snapshot_diff_status "${dir}" | while IFS=$'\t' read -r status name; do
     printf '  %-8s %s\n' "${status}" "${name}"

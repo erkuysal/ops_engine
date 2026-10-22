@@ -182,6 +182,7 @@ run_remote() {
   done
   printf ' %s %s\n' "$(container_shell_quote "${REMOTE_TARGET}")" "$(container_shell_quote "${cmd}")"
   if [[ "${DRY_RUN}" != "true" ]]; then
+    # shellcheck disable=SC2029 # cmd is already fully resolved/quoted locally; it's meant to run verbatim remotely
     ssh "${ssh_args[@]}" "${REMOTE_TARGET}" "${cmd}"
   fi
 }

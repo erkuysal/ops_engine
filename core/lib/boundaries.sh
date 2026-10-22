@@ -15,7 +15,7 @@ ops_package_root() {
 
 _boundary_relpath() {
   local path="$1" root="$2"
-  printf '%s' "${path#${root}/}"
+  printf '%s' "${path#"${root}"/}"
 }
 
 boundary_scan_text() {
@@ -92,7 +92,7 @@ boundary_doctor() {
   machine_paths="$(boundary_scan_text "${root}" '(C:\\Users\\|C:\\Program Files\\|D:/DEV/UNDER_DEVELOPMENT/personal|/mnt/d/DEV/UNDER_DEVELOPMENT/personal)')"
   if [[ -n "${machine_paths}" ]]; then
     while IFS= read -r line; do
-      [[ -n "${line}" ]] && _boundary_fail "machine-local path reference: ${line#${root}/}"
+      [[ -n "${line}" ]] && _boundary_fail "machine-local path reference: ${line#"${root}"/}"
     done <<< "${machine_paths}"
   else
     _boundary_pass "no machine-local path references"
@@ -102,7 +102,7 @@ boundary_doctor() {
   project_terms="$(boundary_scan_text "${root}" '\b(userengine|voice_app|soundilerry|api_core|personal-site|BACKENDs)\b')"
   if [[ -n "${project_terms}" ]]; then
     while IFS= read -r line; do
-      [[ -n "${line}" ]] && _boundary_fail "project-specific package reference: ${line#${root}/}"
+      [[ -n "${line}" ]] && _boundary_fail "project-specific package reference: ${line#"${root}"/}"
     done <<< "${project_terms}"
   else
     _boundary_pass "no project-specific package references"

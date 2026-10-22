@@ -122,6 +122,7 @@ preflight_check_stack "${STACK}"
 env_materialize_dispatch "${SVC_ID}"
 
 # We must ensure env materialization is cleaned up
+# shellcheck disable=SC2317 # invoked only via the trap below, not a direct call
 _cleanup() {
   env_materialize_cleanup "${SVC_ID}"
 }
@@ -129,7 +130,7 @@ trap '_cleanup' EXIT INT TERM
 
 # Export OPS_LOG_SERVICE for log multiplexing
 export OPS_LOG_SERVICE="${SVC_ID}"
-ops_info "Run plan: ${RUN_PLAN_FILE#${OPS_PROJECT_ROOT}/}"
+ops_info "Run plan: ${RUN_PLAN_FILE#"${OPS_PROJECT_ROOT}"/}"
 
 # â”€â”€ Resolve Strategy & Execute â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Command resolution:
@@ -155,6 +156,7 @@ _ensure_runtime_file() {
     if [[ -n "${win_file}" ]]; then
       local wsl_env="WIN_TARGET"
       [[ -n "${WSLENV:-}" ]] && wsl_env="WIN_TARGET:${WSLENV}"
+      # shellcheck disable=SC2016 # PowerShell script: $-vars below must resolve in PowerShell, not bash
       WSLENV="${wsl_env}" WIN_TARGET="${win_file}" powershell.exe -NoProfile -NonInteractive -Command \
         '$path = $env:WIN_TARGET; $dir = Split-Path -Parent $path; New-Item -ItemType Directory -Force -Path $dir | Out-Null; if (-not (Test-Path -LiteralPath $path)) { New-Item -ItemType File -Path $path -Force | Out-Null }' \
         >/dev/null 2>&1 || true
@@ -254,13 +256,13 @@ _run_isolated() {
     start_line="$(_line_count "${log_file}")"
     
     # Use stdbuf to force line-buffered output if available (helps streamed logs)
-    local _stdbuf_cmd=""
+    local -a _stdbuf_cmd=()
     if command -v stdbuf >/dev/null 2>&1; then
-      _stdbuf_cmd="stdbuf -oL -eL"
+      _stdbuf_cmd=(stdbuf -oL -eL)
     fi
 
     # Run in background and save PID
-    _env_exec_run ${_stdbuf_cmd} bash -c "${cmd}" >> "${log_file}" 2>&1 < /dev/null &
+    _env_exec_run "${_stdbuf_cmd[@]}" bash -c "${cmd}" >> "${log_file}" 2>&1 < /dev/null &
     local bg_pid=$!
     disown "${bg_pid}" 2>/dev/null || true
     echo "${bg_pid}" > "${pid_file}"
@@ -275,20 +277,20 @@ _run_isolated() {
 
     if type _ops_log_stream >/dev/null 2>&1; then
       set +e
-      local _stdbuf_cmd=""
+      local -a _stdbuf_cmd=()
       if command -v stdbuf >/dev/null 2>&1; then
-        _stdbuf_cmd="stdbuf -oL -eL"
+        _stdbuf_cmd=(stdbuf -oL -eL)
       fi
-      _env_exec_run ${_stdbuf_cmd} bash -c "${cmd}" > >(tee "${retry_log}" | _ops_log_stream) 2>&1
+      _env_exec_run "${_stdbuf_cmd[@]}" bash -c "${cmd}" > >(tee "${retry_log}" | _ops_log_stream) 2>&1
       code=$?
       set -e
     else
       set +e
-      local _stdbuf_cmd=""
+      local -a _stdbuf_cmd=()
       if command -v stdbuf >/dev/null 2>&1; then
-        _stdbuf_cmd="stdbuf -oL -eL"
+        _stdbuf_cmd=(stdbuf -oL -eL)
       fi
-      _env_exec_run ${_stdbuf_cmd} bash -c "${cmd}" > >(tee "${retry_log}") 2>&1
+      _env_exec_run "${_stdbuf_cmd[@]}" bash -c "${cmd}" > >(tee "${retry_log}") 2>&1
       code=$?
       set -e
     fi
@@ -469,10 +471,10 @@ EOF
 
 case "${SELECTED_STRATEGY}" in
   service_override)
-    _run_selected_script "Running selected service override: ${SELECTED_COMMAND#${OPS_PROJECT_ROOT}/}" "${SELECTED_COMMAND}" "${SELECTED_CWD}"
+    _run_selected_script "Running selected service override: ${SELECTED_COMMAND#"${OPS_PROJECT_ROOT}"/}" "${SELECTED_COMMAND}" "${SELECTED_CWD}"
     ;;
   global_override)
-    _run_selected_script "Running selected global override: ${SELECTED_COMMAND#${OPS_PROJECT_ROOT}/}" "${SELECTED_COMMAND}" "${SELECTED_CWD}"
+    _run_selected_script "Running selected global override: ${SELECTED_COMMAND#"${OPS_PROJECT_ROOT}"/}" "${SELECTED_COMMAND}" "${SELECTED_CWD}"
     ;;
   setup_command)
     _run_selected_isolated "Running selected setup command for ${SVC_ID}" "${SELECTED_COMMAND}" "${SELECTED_CWD}"
@@ -494,4 +496,5 @@ case "${SELECTED_STRATEGY}" in
     ;;
 esac
 
+# shellcheck disable=SC2317 # reachable via the non-exiting case branches above (override/setup_command/stack/legacy_bridge)
 exit 0
