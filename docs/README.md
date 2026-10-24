@@ -43,6 +43,7 @@ Contributor and implementation docs for the `.ops` package. For day-to-day usage
 | [commands/ship.md](commands/ship.md) | `core/commands/ship.sh`, `core/lib/shipping.sh` |
 | [commands/build.md](commands/build.md) | `core/commands/build.sh` |
 | [commands/deploy.md](commands/deploy.md) | `core/commands/deploy.sh` |
+| [commands/revision.md](commands/revision.md) | `core/commands/revision.sh`, `core/lib/revision.sh` |
 | [commands/ci.md](commands/ci.md) | `core/commands/ci.sh` |
 | [commands/validate.md](commands/validate.md) | `core/commands/validate.sh` |
 | [commands/doctor.md](commands/doctor.md) | `core/commands/doctor.sh` |

@@ -11,6 +11,7 @@ source "${_SELF_DIR}/../lib/output.sh"
 unset OPS_PROJECT_CONFIG_SERVICES_FILE OPS_PROJECT_CONFIG_PROJECT_FILE
 source "${_SELF_DIR}/../lib/manifest.sh"
 source "${_SELF_DIR}/../lib/container_pipeline.sh"
+source "${_SELF_DIR}/../lib/revision.sh"
 
 SERVICE=""
 COMPOSE_SERVICE=""
@@ -23,10 +24,14 @@ NO_PULL=false
 BUILD=false
 NO_START=false
 NON_INTERACTIVE=false
+MESSAGE=""
+TARGET_LABEL=""
+ALLOW_DIRTY=false
+NO_RECORD=false
 
 _usage_deploy() {
   cat <<'EOF'
-Usage: ops deploy [SERVICE] [--service=ID|--all] [--compose-service=NAME] [--tag=TAG] [--pull-only] [--no-pull] [--build] [--no-start] [--non-interactive] [--dry-run] [--json]
+Usage: ops deploy [SERVICE] [--service=ID|--all] [--compose-service=NAME] [--tag=TAG] [--pull-only] [--no-pull] [--build] [--no-start] [--message=TEXT] [--target=NAME] [--allow-dirty] [--no-record] [--non-interactive] [--dry-run] [--json]
 
 Deploy configured compose services on a remote server.
 
@@ -38,6 +43,14 @@ The basic native deploy command runs on the remote host:
 
 If the project has no deployment connection, an interactive terminal opens the
 same saved/create/project-only/defer selector used by `ops setup`.
+
+Every deploy is recorded (see `ops revision`): the git commit when there is one,
+otherwise a time-based id and --message. Compose sees OPS_REVISION and
+OPS_REVISION_COMMIT. Uncommitted git changes stop the deploy unless --allow-dirty.
+  --message=TEXT  What is being deployed (asked for when there is no git)
+  --target=NAME   Environment label for the record, e.g. staging
+  --allow-dirty   Deploy uncommitted changes (recorded as dirty)
+  --no-record     Skip the revision record for this deploy
 
 EOF
   container_usage_common
@@ -68,6 +81,15 @@ while [[ $# -gt 0 ]]; do
     --no-pull) NO_PULL=true ;;
     --build) BUILD=true ;;
     --no-start) NO_START=true ;;
+    --message=*) MESSAGE="${1#*=}" ;;
+    --message|-m)
+      [[ $# -ge 2 ]] || die "$1 requires a value" 2
+      MESSAGE="$2"
+      shift
+      ;;
+    --target=*) TARGET_LABEL="${1#*=}" ;;
+    --allow-dirty) ALLOW_DIRTY=true ;;
+    --no-record) NO_RECORD=true ;;
     --non-interactive) NON_INTERACTIVE=true ;;
     --dry-run) DRY_RUN=true ;;
     --json) JSON=true ;;
@@ -146,6 +168,20 @@ if [[ ( -n "${SERVICE}" || -n "${COMPOSE_SERVICE}" ) && "$(jq 'length' <<< "${PL
   die "No compose deploy target found for service: ${SERVICE:-*}${COMPOSE_SERVICE:+ / compose service: ${COMPOSE_SERVICE}}" 2
 fi
 
+RECORD_ENABLED=true
+if [[ "${NO_RECORD}" == "true" || "$(ops_setting_bool '.revision.enabled' 'true')" != "true" ]]; then
+  RECORD_ENABLED=false
+fi
+REVISION_SOURCE="$(revision_source_json)"
+if [[ "${RECORD_ENABLED}" == "true" && "${DRY_RUN}" != "true" && "${JSON}" != "true" ]]; then
+  interactive=false
+  _deploy_can_prompt && interactive=true
+  MESSAGE="$(revision_policy_check "${REVISION_SOURCE}" "${MESSAGE}" "${ALLOW_DIRTY}" "${interactive}")"
+fi
+REVISION_RECORD="$(revision_build_json "${REVISION_SOURCE}" "${TARGET_LABEL}" "${MESSAGE}" "${REMOTE_TARGET}" "${DEPLOY_PATH}")"
+REVISION_ID="$(jq -r '.id' <<< "${REVISION_RECORD}")"
+REVISION_COMMIT="$(jq -r '.commit // ""' <<< "${REVISION_RECORD}")"
+
 if [[ "${JSON}" == "true" ]]; then
   jq -n \
     --arg tag "${TAG}" \
@@ -157,7 +193,9 @@ if [[ "${JSON}" == "true" ]]; then
     --argjson no_start "${NO_START}" \
     --argjson ssh_args "${SSH_ARGS_JSON}" \
     --argjson targets "${PLAN}" \
-    '{tag: $tag, remote: $remote, deploy_path: $path, stages: {pull: ($no_pull | not), build: $build, start: ($no_start | not)}, pull_only: $pull_only, no_pull: $no_pull, build: $build, no_start: $no_start, ssh_args: $ssh_args, targets: $targets}' \
+    --argjson revision "${REVISION_RECORD}" \
+    --argjson record "${RECORD_ENABLED}" \
+    '{tag: $tag, remote: $remote, deploy_path: $path, stages: {pull: ($no_pull | not), build: $build, start: ($no_start | not)}, pull_only: $pull_only, no_pull: $no_pull, build: $build, no_start: $no_start, ssh_args: $ssh_args, targets: $targets, revision: $revision, record_revision: $record}' \
     | ops_json_envelope "deploy"
   exit 0
 fi
@@ -196,6 +234,10 @@ print_deploy_plan_summary() {
   printf '  pull: %s\n' "$([[ "${NO_PULL}" == "true" ]] && printf 'false' || printf 'true')"
   printf '  build: %s\n' "${BUILD}"
   printf '  start: %s\n' "$([[ "${NO_START}" == "true" ]] && printf 'false' || printf 'true')"
+  printf '  revision: %s%s\n' "${REVISION_ID}" "$([[ "${RECORD_ENABLED}" == "true" ]] || printf ' (not recorded)')"
+  if [[ "$(jq -r '.dirty' <<< "${REVISION_SOURCE}")" == "true" ]]; then
+    printf '  uncommitted changes: %s\n' "$(jq -r '.changed_files' <<< "${REVISION_SOURCE}")"
+  fi
   printf '  targets:\n'
   while IFS= read -r target; do
     [[ -n "${target}" ]] || continue
@@ -225,7 +267,7 @@ while IFS= read -r target; do
     compose_args+=("-f" "${file}")
   done < <(jq -r '.compose_files[]?' <<< "${target}")
 
-  compose_part="VERSION=$(container_shell_quote "${TAG}") docker compose"
+  compose_part="VERSION=$(container_shell_quote "${TAG}") OPS_REVISION=$(container_shell_quote "${REVISION_ID}") OPS_REVISION_COMMIT=$(container_shell_quote "${REVISION_COMMIT}") docker compose"
   for arg in "${compose_args[@]}"; do
     compose_part+=" $(container_shell_quote "${arg}")"
   done
@@ -252,6 +294,16 @@ done < <(jq -c '.[]' <<< "${PLAN}")
 
 if [[ "${DRY_RUN}" == "true" ]]; then
   ops_info "Dry-run only. No remote commands executed."
-else
-  ops_ok "Deploy complete."
+  exit 0
+fi
+
+ops_ok "Deploy complete."
+if [[ "${RECORD_ENABLED}" == "true" ]]; then
+  revision_append_local "${REVISION_RECORD}"
+  # shellcheck disable=SC2029 # the write command is quoted locally with %q; it runs verbatim remotely
+  if printf '%s\n' "${REVISION_RECORD}" | ssh "${ssh_args[@]}" "${REMOTE_TARGET}" "$(revision_remote_write_command "${DEPLOY_PATH}")"; then
+    ops_ok "Recorded revision ${REVISION_ID} locally and in ${DEPLOY_PATH}/${OPS_REVISION_REMOTE_FILE}"
+  else
+    ops_warn "Deployed, but the revision record could not be written on the server (local history has it)."
+  fi
 fi

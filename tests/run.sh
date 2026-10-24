@@ -57,6 +57,8 @@ source "${SCRIPT_DIR}/smoke/global-profiles.bash"
 source "${SCRIPT_DIR}/smoke/container-pipeline.bash"
 # shellcheck source=smoke/shipping.bash
 source "${SCRIPT_DIR}/smoke/shipping.bash"
+# shellcheck source=smoke/revision.bash
+source "${SCRIPT_DIR}/smoke/revision.bash"
 # shellcheck source=smoke/libs.bash
 source "${SCRIPT_DIR}/smoke/libs.bash"
 # shellcheck source=smoke/capabilities.bash
@@ -90,6 +92,7 @@ suite_command_exec
 suite_global_profiles
 suite_container_pipeline
 suite_shipping
+suite_revision
 suite_libs
 suite_capabilities
 suite_show

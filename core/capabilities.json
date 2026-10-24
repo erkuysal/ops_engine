@@ -216,6 +216,15 @@
       "doc": "docs/commands/deploy.md"
     },
     {
+      "id": "revision",
+      "summary": "Deploy revision records and deployment history",
+      "status": "live",
+      "safety": "live_by_default",
+      "notes": "'show', 'current' and 'history' are read-only. 'record' appends to the local history (and the server's with --remote) unless --dry-run is passed. Works without git: the record then uses a time-based id and --message.",
+      "script": "core/commands/revision.sh",
+      "doc": "docs/commands/revision.md"
+    },
+    {
       "id": "update",
       "summary": "Manifest self-healing update",
       "status": "live",

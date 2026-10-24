@@ -56,12 +56,13 @@ into it (`OK` defaults to `true`). Every command below pipes its existing
 | Command | Notes |
 | --- | --- |
 | `build` | |
-| `deploy` | |
+| `deploy` | Includes the `revision` record it would write |
 | `describe` | Lists under `commands: [...]` |
 | `doctor` | Not supported for `doctor boundaries` |
 | `global` | `list`/`current` return their own shape; see [global.md](../commands/global.md) |
 | `monitor` | Several subcommands (`credentials`, `hosts`, `postgres info/databases/users`, `setup`, `status`/`test`) each carry their own `command` value, e.g. `"monitor postgres info"` |
 | `package` | |
+| `revision` | Every subcommand; `command` is `"revision"` |
 | `setup` | `setup check` and `setup --module run-plans` |
 | `setup shipping` | `command` is `"setup shipping"` |
 | `ship` | Always plan-only regardless of flags — see [ship.md](../commands/ship.md) |

@@ -24,6 +24,7 @@ The immediate goals are:
 
 ## Recently Completed
 
+- **Deploy revisions:** `ops revision show|record|current|history` and automatic records in `ops deploy`: git commit + dirty flag when available, a time-based id and operator message otherwise; local and server-side JSON Lines history; compose receives `OPS_REVISION`/`OPS_REVISION_COMMIT`. Uncommitted changes stop `ops deploy` unless `--allow-dirty`.
 - **Configured command hardening:** stack adapters use one isolated child-shell executor instead of `eval`; run dispatch shell-quotes command transport and tests cover embedded quotes, spaces, literal/intentional substitutions, multiline commands, and exit-code mapping.
 - **Schema contracts:** CI validates fragment and aggregate project/services/settings/profiles/shipping artifacts, proves invalid fixtures are rejected, and checks agreement with runtime validation. Newly generated schema versions use integer `1`; legacy string versions remain readable with a warning.
 - **Config sync:** `ops setup export-yaml`, `ops setup import-yaml`, config-first `ops validate` (`core/lib/manifest_sync.sh`).

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Fake ssh for smoke tests: logs every remote command to FAKE_SSH_LOG and runs only the
+# revision record commands (they touch files under the test's deploy path), so deploys
+# can be exercised without a server or Docker.
+set -euo pipefail
+
+[[ -n "${FAKE_SSH_LOG:-}" ]] || { printf 'fake ssh: FAKE_SSH_LOG is not set\n' >&2; exit 2; }
+cmd="${*: -1}"
+printf '%s\n' "${cmd}" >> "${FAKE_SSH_LOG}"
+case "${cmd}" in
+  *.ops-revision*|*.ops-deploys*) exec bash -c "${cmd}" ;;
+  *) cat >/dev/null 2>&1 || true ;;
+esac

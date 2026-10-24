@@ -34,6 +34,7 @@
 #   ship      — Unified delivery pipeline planner (LIVE, execution pending)
 #   build     — Native container build/push basics (LIVE)
 #   deploy    — Native remote container deploy basics (LIVE)
+#   revision  — Deploy revision records and history (LIVE)
 #   update    — Manifest self-healing update (LIVE)
 #   describe  — Machine-readable command capability manifest (LIVE)
 #   version   — Print orchestrator version
@@ -94,6 +95,7 @@ Commands:
   ship      Unified delivery pipeline planner [live, plan-only]
   build     Native container build/push       [live]
   deploy    Native remote container deploy    [live]
+  revision  Deploy revision records/history   [live]
   update    Manifest self-healing update      [live]
   env       show/doctor env context           [live]
   describe  Command capability manifest (agent/scripting) [live]
@@ -148,6 +150,7 @@ ${OPS_BOLD}Commands${OPS_NC}
   ${OPS_BOLD}ship${OPS_NC}      Unified delivery pipeline planner ${OPS_YELLOW}[live, plan-only]${OPS_NC}
   ${OPS_BOLD}build${OPS_NC}     Native container build/push       ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}deploy${OPS_NC}    Native remote container deploy    ${OPS_GREEN}[live]${OPS_NC}
+  ${OPS_BOLD}revision${OPS_NC}  Deploy revision records/history   ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}update${OPS_NC}    Manifest self-healing update      ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}env${OPS_NC}       show / doctor env context          ${OPS_GREEN}[live]${OPS_NC}
   ${OPS_BOLD}describe${OPS_NC}  Command capability manifest (agent/scripting) ${OPS_GREEN}[live]${OPS_NC}
@@ -296,6 +299,10 @@ case "${COMMAND}" in
 
   deploy)
     exec bash "${_MAIN_DIR}/commands/deploy.sh" "$@"
+    ;;
+
+  revision)
+    exec bash "${_MAIN_DIR}/commands/revision.sh" "$@"
     ;;
 
   update)
