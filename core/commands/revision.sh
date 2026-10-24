@@ -194,7 +194,10 @@ case "${SUBCOMMAND}" in
       where="${REMOTE_TARGET}:${REMOTE_DEPLOY_PATH}/${OPS_REVISION_REMOTE_HISTORY}"
     else
       file="$(revision_local_history_file)"
-      jsonl="$([[ -f "${file}" ]] && tail -n "${LIMIT}" "${file}" || true)"
+      jsonl=""
+      if [[ -f "${file}" ]]; then
+        jsonl="$(tail -n "${LIMIT}" "${file}")"
+      fi
       where="${file}"
     fi
     if [[ "${JSON}" == "true" ]]; then
